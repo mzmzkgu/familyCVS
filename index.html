@@ -172,6 +172,7 @@ body{
 .sc.tr{top:15%;right:15%;border-width:3px 3px 0 0;border-radius:0 2px 0 0}
 .sc.bl{bottom:20%;left:15%;border-width:0 0 3px 3px;border-radius:0 0 0 2px}
 .sc.br{bottom:20%;right:15%;border-width:0 3px 3px 0;border-radius:0 0 2px 0}
+#qr-reader{ display:none !important; }
 #focus-ring{
   position:absolute;width:56px;height:56px;
   border:2px solid #fff;border-radius:50%;
@@ -366,7 +367,7 @@ body{
     <div class="tab-panel active" id="tab-register">
       <div id="camera-area">
         <video id="video" autoplay playsinline muted></video>
-        <div id="focus-ring"></div>
+        <div id="qr-reader"></div>
         <div id="cam-placeholder">
           <div class="ci">&#128247;</div>
           <p>여기를 눌러서 카메라 촬영</p>
@@ -522,7 +523,7 @@ body{
 
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js" onerror="console.warn('ZXing load failed')"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
 
@@ -530,7 +531,7 @@ const API = 'https://script.google.com/macros/s/AKfycbx1_8hRq2I1RVGPQ0Ba5X9fs5ro
 
 let allRecords = [], allMemos = [], products = {};
 let editingRecord = null, editingMemo = null;
-let cameraActive = false, codeReader = null, scanControls = null;
+let cameraActive = false;
 let fontScale = parseFloat(localStorage.getItem('fs') || '1');
 let isDark = localStorage.getItem('theme') === 'dark';
 let memosVisible = 7;
@@ -674,165 +675,105 @@ function api(params) {
   });
 }
 
-/* ── 카메라 ── */
+/* ── 카메라 (html5-qrcode) ── */
+var html5QrCode = null;
+
 function handleCamTap(e) {
   if (!cameraActive) { toggleCamera(); }
-  // 카메라 활성 상태에서 탭은 아무 동작 안 함 (자동포커스에 맡김)
 }
 
 function toggleCamera() {
   if (cameraActive) return;
   var area = document.getElementById('camera-area');
-  var video = document.getElementById('video');
+  area.classList.add('active');
+  cameraActive = true;
+  document.getElementById('capture-btn').style.display = 'flex';
+  document.getElementById('stop-cam-btn').style.display = 'flex';
 
-  var constraints = {
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1920, min: 1280 },
-      height: { ideal: 1080, min: 720 },
-      focusMode: { ideal: 'continuous' },
-      advanced: [{ focusMode: 'continuous' }]
-    }
+  html5QrCode = new Html5Qrcode('qr-reader');
+
+  var config = {
+    fps: 15,
+    qrbox: { width: 240, height: 120 },
+    aspectRatio: 1.7,
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E
+    ]
   };
 
-  navigator.mediaDevices.getUserMedia(constraints)
-    .catch(function() {
-      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    })
-    .then(function(stream) {
-      video.srcObject = stream;
-      area.classList.add('active');
-      cameraActive = true;
-      document.getElementById('capture-btn').style.display = 'flex';
-      document.getElementById('stop-cam-btn').style.display = 'flex';
-
-      // 스트림 안정화 후 줌 적용
-      setTimeout(function() { applyZoom(stream, 2.0); }, 800);
-
-      startZxing(video);
-    })
-    .catch(function() { showToast('카메라 권한이 필요해요'); });
-}
-
-function applyZoom(stream, zoomLevel) {
-  try {
-    var track = stream.getVideoTracks()[0];
-    if (!track) return;
-    var caps = track.getCapabilities ? track.getCapabilities() : {};
-    if (caps.zoom) {
-      var minZ = caps.zoom.min || 1;
-      var maxZ = caps.zoom.max || 1;
-      // 요청한 줌 레벨이 범위 안에 들어오게 클램프
-      var z = Math.min(maxZ, Math.max(minZ, zoomLevel));
-      track.applyConstraints({ advanced: [{ zoom: z }] })
-        .then(function() { console.log('줌 적용:', z); })
-        .catch(function() {});
-    }
-  } catch(e) {}
-}
-
-function startZxing(video) {
-  if (typeof ZXingBrowser === 'undefined') { return; }
-  try {
-    var hints = new Map();
-    hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXingBrowser.BarcodeFormat.EAN_13, ZXingBrowser.BarcodeFormat.EAN_8,
-      ZXingBrowser.BarcodeFormat.CODE_128, ZXingBrowser.BarcodeFormat.UPC_A
-    ]);
-    // TRY_HARDER 옵션 추가 - 인식률 향상
-    hints.set(ZXingBrowser.DecodeHintType.TRY_HARDER, true);
-    codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
-    codeReader.decodeFromVideoElement(video, function(result, err) {
-      if (result && result.getText()) {
-        var code = result.getText();
-        setBarcode(code);
-        stopCamera();
-        showToast('바코드 인식 완료! (' + code.slice(0,3) + '···' + code.slice(-3) + ')');
-      }
-      // err는 매 프레임마다 발생하는 정상 동작이라 무시
-    }).then(function(controls) {
-      scanControls = controls;
-    }).catch(function(e) {
-      // ZXing 실패시 조용히 무시 - 수동 촬영 버튼으로 대체
-    });
-  } catch(e) {}
-}
-
-function tapToFocus(e) {
-  var area = document.getElementById('camera-area');
-  var ring = document.getElementById('focus-ring');
-  var rect = area.getBoundingClientRect();
-  var src = (e.touches && e.touches[0]) ? e.touches[0] : e;
-  var x = src.clientX - rect.left;
-  var y = src.clientY - rect.top;
-
-  // 포커스 링 애니메이션
-  ring.style.left = x + 'px'; ring.style.top = y + 'px';
-  ring.classList.remove('show');
-  void ring.offsetWidth;
-  ring.classList.add('show');
-  clearTimeout(ring._t);
-  ring._t = setTimeout(function() { ring.classList.remove('show'); }, 1500);
-
-  // 스트림 재시작으로 강제 재포커싱 (가장 넓은 기기 호환)
-  var video = document.getElementById('video');
-  if (!video.srcObject) return;
-  var track = video.srcObject.getVideoTracks()[0];
-  if (!track) return;
-
-  // 방법1: applyConstraints 시도
-  var tried = false;
-  try {
-    var caps = track.getCapabilities ? track.getCapabilities() : {};
-    if (caps.focusMode && caps.focusMode.length > 0) {
-      tried = true;
-      // 일단 continuous로 리셋했다가 다시 continuous → 재포커스 트리거
-      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
-        .then(function() {
-          // pointsOfInterest 지원하면 추가
-          if (caps.pointsOfInterest) {
-            return track.applyConstraints({ advanced: [{ pointsOfInterest: [{ x: x/rect.width, y: y/rect.height }] }] });
+  html5QrCode.start(
+    { facingMode: 'environment' },
+    config,
+    function(decodedText) {
+      // 자동 인식 성공
+      setBarcode(decodedText);
+      stopCamera();
+      showToast('바코드 인식 완료!');
+    },
+    function(err) { /* 매 프레임 실패는 정상 */ }
+  ).then(function() {
+    // 스트림 연결 후 줌 적용 시도
+    setTimeout(function() {
+      try {
+        var videoEl = area.querySelector('video');
+        if (videoEl && videoEl.srcObject) {
+          var track = videoEl.srcObject.getVideoTracks()[0];
+          if (track) {
+            var caps = track.getCapabilities ? track.getCapabilities() : {};
+            if (caps.zoom) {
+              var z = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 2.0));
+              track.applyConstraints({ advanced: [{ zoom: z }] }).catch(function(){});
+            }
           }
-        }).catch(function(){});
-    }
-  } catch(ex) {}
-
-  // 방법2: 스트림 트랙 재시작 (tried 안됐을 때)
-  if (!tried) {
-    try {
-      track.stop();
-      navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          focusMode: 'continuous',
-          width: { ideal: 1280 }, height: { ideal: 720 }
         }
-      }).then(function(newStream) {
-        var newTrack = newStream.getVideoTracks()[0];
-        video.srcObject = newStream;
-        // ZXing 재시작
-        if (scanControls) { try { scanControls.stop(); } catch(e){} scanControls = null; }
-        startZxing(video);
-      }).catch(function(){});
-    } catch(ex) {}
-  }
+      } catch(e) {}
+    }, 1000);
+  }).catch(function(err) {
+    showToast('카메라 권한이 필요해요');
+    cameraActive = false;
+    area.classList.remove('active');
+    document.getElementById('capture-btn').style.display = 'none';
+    document.getElementById('stop-cam-btn').style.display = 'none';
+  });
 }
 
 function captureBarcode() {
-  var video = document.getElementById('video');
-  var canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-  if (!codeReader) { showToast('인식 실패 - 직접 입력해줘'); return; }
-  codeReader.decodeFromImageUrl(canvas.toDataURL('image/jpeg'))
-    .then(function(r) { setBarcode(r.getText()); stopCamera(); showToast('바코드 인식 완료!'); })
-    .catch(function() { showToast('인식 실패 - 직접 입력해줘'); });
+  // 현재 프레임 캡처해서 인식 시도
+  if (!html5QrCode) { showToast('카메라를 먼저 켜줘'); return; }
+  try {
+    var area = document.getElementById('camera-area');
+    var videoEl = area.querySelector('video');
+    if (!videoEl) { showToast('인식 실패 - 직접 입력해줘'); return; }
+    var canvas = document.createElement('canvas');
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    canvas.getContext('2d').drawImage(videoEl, 0, 0);
+    Html5Qrcode.scanFile(dataURLtoFile(canvas.toDataURL('image/jpeg'), 'frame.jpg'), true)
+      .then(function(code) {
+        setBarcode(code);
+        stopCamera();
+        showToast('바코드 인식 완료!');
+      })
+      .catch(function() { showToast('인식 실패 - 직접 입력해줘'); });
+  } catch(e) { showToast('인식 실패 - 직접 입력해줘'); }
+}
+
+function dataURLtoFile(dataUrl, filename) {
+  var arr = dataUrl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+  var bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+  while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+  return new File([u8arr], filename, { type: mime });
 }
 
 function stopCamera() {
-  var video = document.getElementById('video');
-  if (video.srcObject) { video.srcObject.getTracks().forEach(function(t) { t.stop(); }); video.srcObject = null; }
-  if (scanControls) { try { scanControls.stop(); } catch(e){} scanControls = null; }
+  if (html5QrCode) {
+    html5QrCode.stop().catch(function(){});
+    html5QrCode = null;
+  }
   document.getElementById('camera-area').classList.remove('active');
   cameraActive = false;
   document.getElementById('capture-btn').style.display = 'none';
