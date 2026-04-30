@@ -632,13 +632,46 @@ function switchTab(name) {
   if (btn) btn.classList.add('active');
   if (name === 'records') loadRecords();
   if (name === 'memos') loadMemos();
+  // 등록 후 다른 탭 갔다 돌아오면 새로고침
+  if (name === 'register') { setToday('reg-date'); }
 }
 
-/* ── API ── */
+/* ── API (localStorage 캐시) ── */
+var CACHE_MS = 30000; // 30초 캐시
 function api(params) {
   var q = new URLSearchParams();
   Object.keys(params).forEach(function(k) { q.set(k, params[k]); });
-  return fetch(API + '?' + q.toString()).then(function(r) { return r.json(); });
+  var url = API + '?' + q.toString();
+  var isGet = params.action && params.action.startsWith('get');
+
+  // GET 요청이면 캐시 확인
+  if (isGet) {
+    var cacheKey = 'cvs_' + params.action;
+    try {
+      var cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        var obj = JSON.parse(cached);
+        if (Date.now() - obj.ts < CACHE_MS) {
+          return Promise.resolve(obj.data);
+        }
+      }
+    } catch(e) {}
+  }
+
+  return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    // GET 결과 캐시에 저장
+    if (isGet) {
+      try { localStorage.setItem('cvs_' + params.action, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+    } else {
+      // 쓰기 후 관련 캐시 삭제
+      try {
+        localStorage.removeItem('cvs_getRecords');
+        localStorage.removeItem('cvs_getMemos');
+        localStorage.removeItem('cvs_getProducts');
+      } catch(e) {}
+    }
+    return data;
+  });
 }
 
 /* ── 카메라 ── */
@@ -664,17 +697,29 @@ function toggleCamera() {
 }
 
 function startZxing(video) {
-  if (typeof ZXingBrowser === 'undefined') { showToast('촬영 버튼으로 스캔해줘'); return; }
+  if (typeof ZXingBrowser === 'undefined') { return; }
   try {
     var hints = new Map();
     hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, [
       ZXingBrowser.BarcodeFormat.EAN_13, ZXingBrowser.BarcodeFormat.EAN_8,
       ZXingBrowser.BarcodeFormat.CODE_128, ZXingBrowser.BarcodeFormat.UPC_A
     ]);
+    // TRY_HARDER 옵션 추가 - 인식률 향상
+    hints.set(ZXingBrowser.DecodeHintType.TRY_HARDER, true);
     codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
-    codeReader.decodeFromVideoElement(video, function(result) {
-      if (result) { setBarcode(result.getText()); stopCamera(); showToast('바코드 인식 완료!'); }
-    }).then(function(c) { scanControls = c; }).catch(function() {});
+    codeReader.decodeFromVideoElement(video, function(result, err) {
+      if (result && result.getText()) {
+        var code = result.getText();
+        setBarcode(code);
+        stopCamera();
+        showToast('바코드 인식 완료! (' + code.slice(0,3) + '···' + code.slice(-3) + ')');
+      }
+      // err는 매 프레임마다 발생하는 정상 동작이라 무시
+    }).then(function(controls) {
+      scanControls = controls;
+    }).catch(function(e) {
+      // ZXing 실패시 조용히 무시 - 수동 촬영 버튼으로 대체
+    });
   } catch(e) {}
 }
 
@@ -682,25 +727,60 @@ function tapToFocus(e) {
   var area = document.getElementById('camera-area');
   var ring = document.getElementById('focus-ring');
   var rect = area.getBoundingClientRect();
-  var src = e.touches ? e.touches[0] : e;
+  var src = (e.touches && e.touches[0]) ? e.touches[0] : e;
   var x = src.clientX - rect.left;
   var y = src.clientY - rect.top;
+
+  // 포커스 링 애니메이션
   ring.style.left = x + 'px'; ring.style.top = y + 'px';
   ring.classList.remove('show');
   void ring.offsetWidth;
   ring.classList.add('show');
   clearTimeout(ring._t);
-  ring._t = setTimeout(function() { ring.classList.remove('show'); }, 1200);
+  ring._t = setTimeout(function() { ring.classList.remove('show'); }, 1500);
+
+  // 스트림 재시작으로 강제 재포커싱 (가장 넓은 기기 호환)
+  var video = document.getElementById('video');
+  if (!video.srcObject) return;
+  var track = video.srcObject.getVideoTracks()[0];
+  if (!track) return;
+
+  // 방법1: applyConstraints 시도
+  var tried = false;
   try {
-    var track = document.getElementById('video').srcObject && document.getElementById('video').srcObject.getVideoTracks()[0];
-    if (!track) return;
     var caps = track.getCapabilities ? track.getCapabilities() : {};
-    if (caps.pointsOfInterest || (caps.focusMode && caps.focusMode.includes('manual'))) {
-      track.applyConstraints({ advanced: [{ pointsOfInterest: [{ x: x/rect.width, y: y/rect.height }], focusMode: 'manual' }] })
-        .then(function() { setTimeout(function() { track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function(){}); }, 2000); })
-        .catch(function(){});
+    if (caps.focusMode && caps.focusMode.length > 0) {
+      tried = true;
+      // 일단 continuous로 리셋했다가 다시 continuous → 재포커스 트리거
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+        .then(function() {
+          // pointsOfInterest 지원하면 추가
+          if (caps.pointsOfInterest) {
+            return track.applyConstraints({ advanced: [{ pointsOfInterest: [{ x: x/rect.width, y: y/rect.height }] }] });
+          }
+        }).catch(function(){});
     }
-  } catch(e) {}
+  } catch(ex) {}
+
+  // 방법2: 스트림 트랙 재시작 (tried 안됐을 때)
+  if (!tried) {
+    try {
+      track.stop();
+      navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          focusMode: 'continuous',
+          width: { ideal: 1280 }, height: { ideal: 720 }
+        }
+      }).then(function(newStream) {
+        var newTrack = newStream.getVideoTracks()[0];
+        video.srcObject = newStream;
+        // ZXing 재시작
+        if (scanControls) { try { scanControls.stop(); } catch(e){} scanControls = null; }
+        startZxing(video);
+      }).catch(function(){});
+    } catch(ex) {}
+  }
 }
 
 function captureBarcode() {
@@ -786,12 +866,33 @@ function loadProducts() {
 }
 
 /* ── 기록 ── */
-function loadRecords() {
+var recordsLoaded = false;
+function loadRecords(force) {
   var list = document.getElementById('records-list');
+  // 캐시 데이터 있으면 즉시 표시
+  try {
+    var cached = localStorage.getItem('cvs_getRecords');
+    if (cached && !force) {
+      var obj = JSON.parse(cached);
+      if (obj.data && obj.data.length) {
+        allRecords = obj.data;
+        renderRecords();
+        // 캐시 만료됐으면 백그라운드 갱신
+        if (Date.now() - obj.ts > 30000) refreshRecordsBg();
+        return;
+      }
+    }
+  } catch(e) {}
   list.innerHTML = '<div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>';
   api({ action: 'getRecords' })
     .then(function(data) { allRecords = data || []; renderRecords(); })
     .catch(function() { list.innerHTML = '<div class="loading-row">불러오기 실패</div>'; });
+}
+function refreshRecordsBg() {
+  fetch(API + '?action=getRecords').then(function(r) { return r.json(); }).then(function(data) {
+    try { localStorage.setItem('cvs_getRecords', JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+    allRecords = data || []; renderRecords();
+  }).catch(function(){});
 }
 
 function renderRecords() {
@@ -827,9 +928,16 @@ function renderRecords() {
 }
 
 function fmtDate(d) {
-  if (!d || d.length < 10) return d;
-  var dt = new Date(d + 'T00:00:00');
-  return d + ' (' + ['일','월','화','수','목','금','토'][dt.getDay()] + ')';
+  if (!d) return '';
+  var str = String(d).trim();
+  var nums = str.replace(/\D+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').split('-');
+  if (nums.length < 3) return str;
+  var y = parseInt(nums[0]), mo = parseInt(nums[1]), day = parseInt(nums[2]);
+  if (isNaN(y) || isNaN(mo) || isNaN(day)) return str;
+  var dt = new Date(y, mo - 1, day);
+  if (isNaN(dt.getTime())) return str;
+  var pad = function(n) { return n < 10 ? '0'+n : ''+n; };
+  return y + '-' + pad(mo) + '-' + pad(day) + ' (' + ['일','월','화','수','목','금','토'][dt.getDay()] + ')';
 }
 
 function openEditRecord(r) {
@@ -860,8 +968,21 @@ function deleteRecord() {
 }
 
 /* ── 메모 ── */
-function loadMemos() {
+function loadMemos(force) {
   var list = document.getElementById('memos-list');
+  try {
+    var cached = localStorage.getItem('cvs_getMemos');
+    if (cached && !force) {
+      var obj = JSON.parse(cached);
+      if (obj.data && obj.data.length) {
+        allMemos = obj.data.sort(function(a,b) { return (b['등록일']||'').localeCompare(a['등록일']||''); });
+        memosVisible = fontScale <= 0.8 ? 10 : 7;
+        renderMemos();
+        if (Date.now() - obj.ts > 30000) refreshMemosBg();
+        return;
+      }
+    }
+  } catch(e) {}
   list.innerHTML = '<div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>';
   api({ action: 'getMemos' })
     .then(function(data) {
@@ -870,6 +991,13 @@ function loadMemos() {
       renderMemos();
     })
     .catch(function() { list.innerHTML = '<div class="loading-row">불러오기 실패</div>'; });
+}
+function refreshMemosBg() {
+  fetch(API + '?action=getMemos').then(function(r) { return r.json(); }).then(function(data) {
+    try { localStorage.setItem('cvs_getMemos', JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+    allMemos = (data || []).sort(function(a,b) { return (b['등록일']||'').localeCompare(a['등록일']||''); });
+    renderMemos();
+  }).catch(function(){});
 }
 
 function renderMemos() {
@@ -891,9 +1019,17 @@ function renderMemos() {
 function loadMoreMemos() { memosVisible += 10; renderMemos(); }
 
 function shortDate(d) {
-  if (!d || d.length < 10) return d || '';
-  var dt = new Date(d + 'T00:00:00');
-  return (dt.getMonth()+1) + '/' + dt.getDate() + '(' + ['일','월','화','수','목','금','토'][dt.getDay()] + ')';
+  if (!d) return '';
+  // 다양한 형식 처리: "2026-04-30", "2026. 04. 30.", "2026/04/30" 등
+  var str = String(d).trim();
+  // 숫자만 뽑아서 연/월/일 파싱
+  var nums = str.replace(/\D+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').split('-');
+  if (nums.length < 3) return str;
+  var y = parseInt(nums[0]), mo = parseInt(nums[1]), day = parseInt(nums[2]);
+  if (isNaN(y) || isNaN(mo) || isNaN(day)) return str;
+  var dt = new Date(y, mo - 1, day);
+  if (isNaN(dt.getTime())) return str;
+  return mo + '/' + day + '(' + ['일','월','화','수','목','금','토'][dt.getDay()] + ')';
 }
 
 function updateCharCount() {
