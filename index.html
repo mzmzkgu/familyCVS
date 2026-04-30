@@ -684,7 +684,7 @@ function toggleCamera() {
   if (cameraActive) return;
   var area = document.getElementById('camera-area');
   var video = document.getElementById('video');
-  // 고해상도 + 연속 자동포커스로 처음부터 선명하게
+
   var constraints = {
     video: {
       facingMode: { ideal: 'environment' },
@@ -694,9 +694,9 @@ function toggleCamera() {
       advanced: [{ focusMode: 'continuous' }]
     }
   };
+
   navigator.mediaDevices.getUserMedia(constraints)
     .catch(function() {
-      // 고해상도 실패시 기본 설정으로 폴백
       return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     })
     .then(function(stream) {
@@ -705,9 +705,30 @@ function toggleCamera() {
       cameraActive = true;
       document.getElementById('capture-btn').style.display = 'flex';
       document.getElementById('stop-cam-btn').style.display = 'flex';
+
+      // 스트림 안정화 후 줌 적용
+      setTimeout(function() { applyZoom(stream, 2.0); }, 800);
+
       startZxing(video);
     })
     .catch(function() { showToast('카메라 권한이 필요해요'); });
+}
+
+function applyZoom(stream, zoomLevel) {
+  try {
+    var track = stream.getVideoTracks()[0];
+    if (!track) return;
+    var caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (caps.zoom) {
+      var minZ = caps.zoom.min || 1;
+      var maxZ = caps.zoom.max || 1;
+      // 요청한 줌 레벨이 범위 안에 들어오게 클램프
+      var z = Math.min(maxZ, Math.max(minZ, zoomLevel));
+      track.applyConstraints({ advanced: [{ zoom: z }] })
+        .then(function() { console.log('줌 적용:', z); })
+        .catch(function() {});
+    }
+  } catch(e) {}
 }
 
 function startZxing(video) {
