@@ -676,15 +676,29 @@ function api(params) {
 
 /* ── 카메라 ── */
 function handleCamTap(e) {
-  if (!cameraActive) { toggleCamera(); return; }
-  tapToFocus(e);
+  if (!cameraActive) { toggleCamera(); }
+  // 카메라 활성 상태에서 탭은 아무 동작 안 함 (자동포커스에 맡김)
 }
 
 function toggleCamera() {
   if (cameraActive) return;
   var area = document.getElementById('camera-area');
   var video = document.getElementById('video');
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
+  // 고해상도 + 연속 자동포커스로 처음부터 선명하게
+  var constraints = {
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920, min: 1280 },
+      height: { ideal: 1080, min: 720 },
+      focusMode: { ideal: 'continuous' },
+      advanced: [{ focusMode: 'continuous' }]
+    }
+  };
+  navigator.mediaDevices.getUserMedia(constraints)
+    .catch(function() {
+      // 고해상도 실패시 기본 설정으로 폴백
+      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    })
     .then(function(stream) {
       video.srcObject = stream;
       area.classList.add('active');
@@ -807,9 +821,15 @@ function stopCamera() {
 function setBarcode(code) {
   document.getElementById('barcode-hidden').value = code;
   var el = document.getElementById('barcode-display');
+  el.style.color = '';
   if (code.length >= 6) {
-    el.innerHTML = '<span class="bc-red">' + esc(code.slice(0,3)) + '</span><span class="bc-mid">' + (code.length > 6 ? '···' : esc(code.slice(3,-3))) + '</span><span class="bc-red">' + esc(code.slice(-3)) + '</span>';
-  } else { el.textContent = code; }
+    var p1 = esc(code.slice(0, 3));
+    var mid = esc(code.slice(3, -3));
+    var p2 = esc(code.slice(-3));
+    el.innerHTML = '<span class="bc-red">' + p1 + '</span>' + mid + '<span class="bc-red">' + p2 + '</span>';
+  } else {
+    el.textContent = code;
+  }
   if (products[code]) document.getElementById('reg-name').value = products[code];
 }
 
