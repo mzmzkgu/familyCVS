@@ -805,13 +805,13 @@
 
   <!-- 탭 바 -->
   <div id="tabs">
-    <button class="tab-btn active" onclick="switchTab('register', this)">
+    <button class="tab-btn active" data-tab="register">
       <span class="tab-icon">📝</span>등록
     </button>
-    <button class="tab-btn" onclick="switchTab('records', this)">
+    <button class="tab-btn" data-tab="records">
       <span class="tab-icon">📋</span>기록
     </button>
-    <button class="tab-btn" onclick="switchTab('memos', this)">
+    <button class="tab-btn" data-tab="memos">
       <span class="tab-icon">💬</span>공유메모
     </button>
   </div>
@@ -910,7 +910,7 @@
 <!-- 토스트 -->
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js" onerror="console.warn('ZXing 로드 실패 - 수동 입력만 지원')"></script>
 <script>
 const API_URL = 'https://script.google.com/macros/s/AKfycbx1_8hRq2I1RVGPQ0Ba5X9fs5roOgp21heuXxXVisg6H7iqq04iuV8R16QjfPgBNMTPGg/exec';
 
@@ -933,6 +933,14 @@ window.onload = () => {
   applyFont();
   setToday('reg-date');
   setToday('memo-date');
+
+  // 탭 버튼 이벤트 - data-tab 방식으로 안전하게 연결
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchTab(btn.getAttribute('data-tab'));
+    });
+  });
+
   loadProducts();
   loadRecords();
   loadMemos();
@@ -968,11 +976,13 @@ function applyFont() {
 }
 
 // ── 탭 ──
-function switchTab(name, btn) {
+function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+  const panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
+  const btn = document.querySelector('[data-tab="' + name + '"]');
+  if (btn) btn.classList.add('active');
   if (name === 'records') loadRecords();
   if (name === 'memos') loadMemos();
 }
@@ -1048,22 +1058,26 @@ async function toggleCamera() {
     stopBtn.style.display = 'flex';
 
     try {
-      const hints = new Map();
-      const formats = [
-        ZXingBrowser.BarcodeFormat.EAN_13,
-        ZXingBrowser.BarcodeFormat.EAN_8,
-        ZXingBrowser.BarcodeFormat.CODE_128,
-        ZXingBrowser.BarcodeFormat.UPC_A
-      ];
-      hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, formats);
-      codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
-      scanControls = await codeReader.decodeFromVideoElement(video, (result, err) => {
-        if (result) {
-          setBarcode(result.getText());
-          stopCamera();
-          showToast('✅ 바코드 인식 완료!');
-        }
-      });
+      if (typeof ZXingBrowser !== 'undefined') {
+        const hints = new Map();
+        const formats = [
+          ZXingBrowser.BarcodeFormat.EAN_13,
+          ZXingBrowser.BarcodeFormat.EAN_8,
+          ZXingBrowser.BarcodeFormat.CODE_128,
+          ZXingBrowser.BarcodeFormat.UPC_A
+        ];
+        hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, formats);
+        codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+        scanControls = await codeReader.decodeFromVideoElement(video, (result, err) => {
+          if (result) {
+            setBarcode(result.getText());
+            stopCamera();
+            showToast('✅ 바코드 인식 완료!');
+          }
+        });
+      } else {
+        showToast('📸 촬영 버튼으로 스캔해줘');
+      }
     } catch(e) { /* zxing 실패시 수동만 지원 */ }
   } catch(e) {
     showToast('❌ 카메라 권한이 필요해요');
@@ -1472,6 +1486,14 @@ window.onload = () => {
   applyFont();
   setToday('reg-date');
   setToday('memo-date');
+
+  // 탭 버튼 이벤트 - data-tab 방식으로 안전하게 연결
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchTab(btn.getAttribute('data-tab'));
+    });
+  });
+
   loadProducts();
   loadRecords();
   loadMemos();
@@ -1507,11 +1529,13 @@ function applyFont() {
 }
 
 // ── 탭 ──
-function switchTab(name, btn) {
+function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+  const panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
+  const btn = document.querySelector('[data-tab="' + name + '"]');
+  if (btn) btn.classList.add('active');
   if (name === 'records') loadRecords();
   if (name === 'memos') loadMemos();
 }
