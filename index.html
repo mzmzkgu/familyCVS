@@ -610,7 +610,12 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btn-save-record').addEventListener('click', saveRecord);
   document.getElementById('btn-del-record').addEventListener('click', deleteRecord);
 
-  // 메모 탭
+  // 메모 탭 - 마지막 선택한 등록자 복원
+  var savedAuthor = localStorage.getItem('cvs_lastAuthor');
+  if (savedAuthor) document.getElementById('memo-author').value = savedAuthor;
+  document.getElementById('memo-author').addEventListener('change', function() {
+    localStorage.setItem('cvs_lastAuthor', this.value);
+  });
   document.getElementById('memo-content-input').addEventListener('input', updateCharCount);
   document.getElementById('memo-submit-btn').addEventListener('click', submitMemo);
   document.getElementById('more-btn').addEventListener('click', loadMoreMemos);
