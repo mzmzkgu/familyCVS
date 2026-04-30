@@ -977,6 +977,545 @@ function switchTab(name, btn) {
   if (name === 'memos') loadMemos();
 }
 
+// ── API (모두 GET) ──
+async function api(params) {
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    query.set(k, v);
+  }
+  const res = await fetch(API_URL + '?' + query.toString());
+  return res.json();
+}
+
+// ── 카메라 / 바코드 ──
+function handleCameraAreaTap(e) {
+  if (!cameraActive) {
+    toggleCamera();
+    return;
+  }
+  tapToFocus(e);
+}
+
+async function tapToFocus(e) {
+  const area = document.getElementById('camera-area');
+  const ring = document.getElementById('focus-ring');
+  const rect = area.getBoundingClientRect();
+  const touch = e.touches ? e.touches[0] : e;
+  const x = (touch.clientX !== undefined ? touch.clientX : e.clientX) - rect.left;
+  const y = (touch.clientY !== undefined ? touch.clientY : e.clientY) - rect.top;
+
+  ring.style.left = x + 'px';
+  ring.style.top = y + 'px';
+  ring.classList.remove('show');
+  void ring.offsetWidth;
+  ring.classList.add('show');
+  clearTimeout(ring._timer);
+  ring._timer = setTimeout(() => ring.classList.remove('show'), 1200);
+
+  try {
+    const video = document.getElementById('video');
+    const track = video.srcObject && video.srcObject.getVideoTracks()[0];
+    if (!track) return;
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if ((caps.focusMode && caps.focusMode.includes('manual')) || caps.pointsOfInterest) {
+      const xRatio = x / rect.width;
+      const yRatio = y / rect.height;
+      await track.applyConstraints({
+        advanced: [{ pointsOfInterest: [{ x: xRatio, y: yRatio }], focusMode: 'manual' }]
+      });
+      setTimeout(() => {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      }, 2000);
+    }
+  } catch(err) { /* 미지원 기기 무시 */ }
+}
+
+async function toggleCamera() {
+  if (cameraActive) return;
+  const area = document.getElementById('camera-area');
+  const video = document.getElementById('video');
+  const captureBtn = document.getElementById('capture-btn');
+  const stopBtn = document.getElementById('stop-cam-btn');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    area.classList.add('active');
+    cameraActive = true;
+    captureBtn.style.display = 'flex';
+    stopBtn.style.display = 'flex';
+
+    try {
+      const hints = new Map();
+      const formats = [
+        ZXingBrowser.BarcodeFormat.EAN_13,
+        ZXingBrowser.BarcodeFormat.EAN_8,
+        ZXingBrowser.BarcodeFormat.CODE_128,
+        ZXingBrowser.BarcodeFormat.UPC_A
+      ];
+      hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, formats);
+      codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+      scanControls = await codeReader.decodeFromVideoElement(video, (result, err) => {
+        if (result) {
+          setBarcode(result.getText());
+          stopCamera();
+          showToast('✅ 바코드 인식 완료!');
+        }
+      });
+    } catch(e) { /* zxing 실패시 수동만 지원 */ }
+  } catch(e) {
+    showToast('❌ 카메라 권한이 필요해요');
+  }
+}
+
+function captureBarcode() {
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  if (codeReader) {
+    try {
+      const imageData = canvas.toDataURL('image/jpeg');
+      codeReader.decodeFromImageUrl(imageData).then(result => {
+        setBarcode(result.getText());
+        stopCamera();
+        showToast('✅ 바코드 인식 완료!');
+      }).catch(() => {
+        showToast('⚠️ 인식 실패 - 직접 입력해줘');
+      });
+    } catch(e) {
+      showToast('⚠️ 인식 실패 - 직접 입력해줘');
+    }
+  }
+}
+
+function stopCamera() {
+  const video = document.getElementById('video');
+  const area = document.getElementById('camera-area');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  if (scanControls) { try { scanControls.stop(); } catch(e){} scanControls = null; }
+  area.classList.remove('active');
+  cameraActive = false;
+  document.getElementById('capture-btn').style.display = 'none';
+  document.getElementById('stop-cam-btn').style.display = 'none';
+}
+
+function setBarcode(code) {
+  document.getElementById('barcode-hidden').value = code;
+  renderBarcodeDisplay(code);
+  if (products[code]) {
+    document.getElementById('reg-name').value = products[code];
+  }
+}
+
+function renderBarcodeDisplay(code) {
+  if (!code) return;
+  const el = document.getElementById('barcode-display');
+  const len = code.length;
+  if (len >= 6) {
+    const p1 = code.slice(0, 3);
+    const mid = code.slice(3, len - 3);
+    const p2 = code.slice(len - 3);
+    el.innerHTML = '<span class="bc-red">' + p1 + '</span><span class="bc-mid">' + (mid.length > 3 ? '...' : mid) + '</span><span class="bc-red">' + p2 + '</span>';
+  } else {
+    el.textContent = code;
+  }
+}
+
+function manualInput() {
+  stopCamera();
+  openModal('manual-barcode-modal');
+  setTimeout(() => document.getElementById('manual-barcode-input').focus(), 100);
+}
+
+function applyManualBarcode() {
+  const val = document.getElementById('manual-barcode-input').value.trim();
+  if (!val) { showToast('바코드를 입력해줘'); return; }
+  setBarcode(val);
+  closeModal('manual-barcode-modal');
+  document.getElementById('manual-barcode-input').value = '';
+}
+
+// ── 등록 제출 ──
+async function submitRecord() {
+  const date = document.getElementById('reg-date').value;
+  const barcode = document.getElementById('barcode-hidden').value.trim();
+  const name = document.getElementById('reg-name').value.trim();
+  const qty = parseInt(document.getElementById('qty-input').value) || 1;
+
+  if (!date) { showToast('날짜를 입력해줘'); return; }
+  if (!barcode && !name) { showToast('바코드 또는 제품명을 입력해줘'); return; }
+
+  const btn = document.getElementById('reg-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '등록 중...';
+
+  try {
+    await api({ action: 'addRecord', 등록일: date, 바코드: barcode, 제품명: name, 수량: qty });
+    showToast('✅ 등록 완료!');
+    document.getElementById('barcode-hidden').value = '';
+    document.getElementById('barcode-display').innerHTML = '<span style="color:var(--text3)">바코드를 촬영하거나 직접 입력</span>';
+    document.getElementById('reg-name').value = '';
+    document.getElementById('qty-input').value = '1';
+    setToday('reg-date');
+    loadProducts();
+  } catch(e) {
+    showToast('❌ 등록 실패 - 다시 시도해줘');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✅ 등록하기';
+  }
+}
+
+function changeQty(d) {
+  const input = document.getElementById('qty-input');
+  input.value = Math.max(1, (parseInt(input.value) || 1) + d);
+}
+
+// ── Products DB ──
+async function loadProducts() {
+  try {
+    const data = await api({ action: 'getProducts' });
+    products = {};
+    (data || []).forEach(p => { if (p.바코드) products[p.바코드] = p.제품명; });
+  } catch(e) {}
+}
+
+// ── 기록 ──
+async function loadRecords() {
+  const list = document.getElementById('records-list');
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>';
+  try {
+    allRecords = await api({ action: 'getRecords' });
+    renderRecords();
+  } catch(e) {
+    list.innerHTML = '<div class="loading-row">❌ 불러오기 실패</div>';
+  }
+}
+
+function renderRecords() {
+  const list = document.getElementById('records-list');
+  if (!allRecords.length) {
+    list.innerHTML = '<div class="loading-row" style="color:var(--text3)">📭 기록이 없어</div>';
+    return;
+  }
+
+  const groups = {};
+  allRecords.forEach(r => {
+    const d = r['등록일'] || '날짜 없음';
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(r);
+  });
+
+  const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+  const latestDate = sortedDates[0];
+
+  list.innerHTML = '';
+  sortedDates.forEach(date => {
+    const items = groups[date];
+    const isLatest = date === latestDate;
+
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'date-group';
+
+    const header = document.createElement('div');
+    header.className = 'date-header' + (isLatest ? ' open' : '');
+    header.innerHTML =
+      '<div class="dh-left">' +
+        '<span class="dh-date">' + formatDate(date) + '</span>' +
+        '<span class="dh-count">' + items.length + '개</span>' +
+      '</div>' +
+      '<span class="dh-arrow">▼</span>';
+
+    const itemsDiv = document.createElement('div');
+    itemsDiv.className = 'date-items' + (isLatest ? ' open' : '');
+
+    items.forEach(r => {
+      const bc = r['바코드'] || '';
+      const itemEl = document.createElement('div');
+      itemEl.className = 'record-item';
+      const rJson = escAttr(JSON.stringify(r));
+      itemEl.innerHTML =
+        '<span class="ri-bc">' + formatBarcodeShort(bc) + '</span>' +
+        '<span class="ri-name">' + escHtml(r['제품명'] || '-') + '</span>' +
+        '<span class="ri-qty">' + (r['수량'] || 0) + '</span>' +
+        '<button class="ri-edit-btn" onclick='openEditRecord(' + rJson + ')'>수정</button>';
+      itemsDiv.appendChild(itemEl);
+    });
+
+    header.onclick = () => {
+      header.classList.toggle('open');
+      itemsDiv.classList.toggle('open');
+    };
+
+    groupDiv.appendChild(header);
+    groupDiv.appendChild(itemsDiv);
+    list.appendChild(groupDiv);
+  });
+}
+
+function formatDate(d) {
+  if (!d || d.length < 10) return d;
+  const dt = new Date(d + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  return d + ' (' + days[dt.getDay()] + ')';
+}
+
+function formatBarcodeShort(bc) {
+  if (!bc || bc.length < 6) return bc;
+  const p1 = bc.slice(0, 3);
+  const p2 = bc.slice(-3);
+  return '<span class="bc-red">' + p1 + '</span>···<span class="bc-red">' + p2 + '</span>';
+}
+
+function openEditRecord(r) {
+  editingRecord = r;
+  document.getElementById('edit-date').value = r['등록일'] || today();
+  document.getElementById('edit-barcode').value = r['바코드'] || '';
+  document.getElementById('edit-name').value = r['제품명'] || '';
+  document.getElementById('edit-qty').value = r['수량'] || 1;
+  openModal('edit-record-modal');
+}
+
+async function saveRecord() {
+  if (!editingRecord) return;
+  try {
+    await api({
+      action: 'updateRecord',
+      _row: editingRecord._row,
+      등록일: document.getElementById('edit-date').value,
+      바코드: document.getElementById('edit-barcode').value,
+      제품명: document.getElementById('edit-name').value,
+      수량: parseInt(document.getElementById('edit-qty').value) || 1,
+    });
+    showToast('✅ 수정 완료!');
+    closeModal('edit-record-modal');
+    loadRecords();
+  } catch(e) { showToast('❌ 수정 실패'); }
+}
+
+async function deleteRecord() {
+  if (!editingRecord) return;
+  if (!confirm('이 기록을 삭제할까?')) return;
+  try {
+    await api({ action: 'deleteRecord', _row: editingRecord._row });
+    showToast('🗑️ 삭제 완료!');
+    closeModal('edit-record-modal');
+    loadRecords();
+  } catch(e) { showToast('❌ 삭제 실패'); }
+}
+
+// ── 메모 ──
+async function loadMemos() {
+  const list = document.getElementById('memos-list');
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>';
+  try {
+    const data = await api({ action: 'getMemos' });
+    allMemos = (data || []).sort((a, b) => (b['등록일'] || '').localeCompare(a['등록일'] || ''));
+    memosVisible = fontScale <= 0.8 ? 10 : 7;
+    renderMemos();
+  } catch(e) {
+    list.innerHTML = '<div class="loading-row">❌ 불러오기 실패</div>';
+  }
+}
+
+function renderMemos() {
+  const list = document.getElementById('memos-list');
+  const moreBtn = document.getElementById('more-btn');
+  const showing = allMemos.slice(0, memosVisible);
+  list.innerHTML = '';
+
+  if (!allMemos.length) {
+    list.innerHTML = '<div class="loading-row" style="color:var(--text3)">📭 메모가 없어</div>';
+    moreBtn.style.display = 'none';
+    return;
+  }
+
+  showing.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'memo-item';
+    const mJson = escAttr(JSON.stringify(m));
+    el.innerHTML =
+      '<span class="mi-date">' + shortDate(m['등록일']) + '</span>' +
+      '<span class="mi-author">' + escHtml(m['등록자'] || '') + '</span>' +
+      '<span class="mi-text">' + escHtml(m['메모'] || '') + '</span>' +
+      '<button class="mi-edit-btn" onclick='openEditMemo(' + mJson + ')'>수정</button>';
+    list.appendChild(el);
+  });
+
+  const remaining = allMemos.length - memosVisible;
+  if (remaining > 0) {
+    moreBtn.style.display = 'flex';
+    moreBtn.textContent = '더 보기 (' + remaining + '개) ▾';
+  } else {
+    moreBtn.style.display = 'none';
+  }
+}
+
+function loadMoreMemos() {
+  memosVisible += 10;
+  renderMemos();
+}
+
+function shortDate(d) {
+  if (!d || d.length < 10) return d || '';
+  const dt = new Date(d + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  return (dt.getMonth()+1) + '/' + dt.getDate() + '(' + days[dt.getDay()] + ')';
+}
+
+function updateCharCount() {
+  const ta = document.getElementById('memo-content-input');
+  const cc = document.getElementById('char-count');
+  const len = ta.value.length;
+  cc.textContent = len + ' / 50';
+  cc.className = 'char-count' + (len >= 45 ? ' warn' : '');
+}
+
+async function submitMemo() {
+  const date = document.getElementById('memo-date').value;
+  const author = document.getElementById('memo-author').value;
+  const content = document.getElementById('memo-content-input').value.trim();
+  if (!content) { showToast('메모 내용을 입력해줘'); return; }
+  try {
+    await api({ action: 'addMemo', 등록일: date, 등록자: author, 메모: content });
+    showToast('✅ 메모 등록 완료!');
+    document.getElementById('memo-content-input').value = '';
+    updateCharCount();
+    loadMemos();
+  } catch(e) { showToast('❌ 등록 실패'); }
+}
+
+function openEditMemo(m) {
+  editingMemo = m;
+  document.getElementById('edit-memo-date').value = m['등록일'] || today();
+  document.getElementById('edit-memo-author').value = m['등록자'] || '아빠';
+  document.getElementById('edit-memo-text').value = m['메모'] || '';
+  openModal('edit-memo-modal');
+}
+
+async function saveMemo() {
+  if (!editingMemo) return;
+  try {
+    await api({
+      action: 'updateMemo',
+      _row: editingMemo._row,
+      등록일: document.getElementById('edit-memo-date').value,
+      등록자: document.getElementById('edit-memo-author').value,
+      메모: document.getElementById('edit-memo-text').value,
+    });
+    showToast('✅ 수정 완료!');
+    closeModal('edit-memo-modal');
+    loadMemos();
+  } catch(e) { showToast('❌ 수정 실패'); }
+}
+
+async function deleteMemo() {
+  if (!editingMemo) return;
+  if (!confirm('이 메모를 삭제할까?')) return;
+  try {
+    await api({ action: 'deleteMemo', _row: editingMemo._row });
+    showToast('🗑️ 삭제 완료!');
+    closeModal('edit-memo-modal');
+    loadMemos();
+  } catch(e) { showToast('❌ 삭제 실패'); }
+}
+
+// ── 모달 ──
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ── 토스트 ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── 유틸 ──
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(str) {
+  return String(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+</script>
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbx1_8hRq2I1RVGPQ0Ba5X9fs5roOgp21heuXxXVisg6H7iqq04iuV8R16QjfPgBNMTPGg/exec';
+
+// ── 상태 ──
+let allRecords = [];
+let allMemos = [];
+let products = {};
+let editingRecord = null;
+let editingMemo = null;
+let cameraActive = false;
+let codeReader = null;
+let scanControls = null;
+let fontScale = parseFloat(localStorage.getItem('fontScale') || '1');
+let isDark = localStorage.getItem('theme') === 'dark';
+let memosVisible = 7;
+
+// ── 초기화 ──
+window.onload = () => {
+  applyTheme();
+  applyFont();
+  setToday('reg-date');
+  setToday('memo-date');
+  loadProducts();
+  loadRecords();
+  loadMemos();
+};
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+function setToday(id) {
+  document.getElementById(id).value = today();
+}
+
+// ── 테마 ──
+function toggleTheme() {
+  isDark = !isDark;
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  applyTheme();
+}
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+}
+
+// ── 폰트 ──
+function changeFont(d) {
+  fontScale = Math.min(1.4, Math.max(0.7, fontScale + d * 0.1));
+  fontScale = Math.round(fontScale * 10) / 10;
+  localStorage.setItem('fontScale', fontScale);
+  applyFont();
+}
+function applyFont() {
+  document.documentElement.style.setProperty('--font-scale', fontScale);
+}
+
+// ── 탭 ──
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'records') loadRecords();
+  if (name === 'memos') loadMemos();
+}
+
 // ── API ── (모두 GET으로 처리 - CORS 문제 방지)
 async function api(params) {
   const query = new URLSearchParams();
