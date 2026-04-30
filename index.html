@@ -697,6 +697,14 @@ function handleCamTap(e) {
 }
 
 function triggerCamera() {
+  // 이전 크롭 이미지 제거
+  var old = document.getElementById('cropped-barcode');
+  if (old) old.remove();
+  var ph = document.getElementById('cam-placeholder');
+  ph.style.display = '';
+  ph.classList.remove('after-scan');
+  var txt = document.getElementById('cam-placeholder-text');
+  if (txt) txt.textContent = '바코드 촬영하기';
   document.getElementById('cam-input').click();
 }
 
@@ -750,7 +758,38 @@ function getCanvasVariants(srcCanvas) {
   return variants;
 }
 
-// 사진에서 바코드 인식 (다수결)
+// 바코드 영역 크롭해서 카메라 영역에 표시
+function showCroppedBarcode(srcCanvas, boundingBox) {
+  var area = document.getElementById('camera-area');
+  var ph = document.getElementById('cam-placeholder');
+
+  // 기존 크롭 이미지 제거
+  var old = document.getElementById('cropped-barcode');
+  if (old) old.remove();
+
+  // 여백 추가해서 크롭
+  var pad = 30;
+  var x = Math.max(0, boundingBox.x - pad);
+  var y = Math.max(0, boundingBox.y - pad);
+  var w = Math.min(srcCanvas.width - x, boundingBox.width + pad * 2);
+  var h = Math.min(srcCanvas.height - y, boundingBox.height + pad * 2);
+
+  var cropCanvas = document.createElement('canvas');
+  cropCanvas.width = w;
+  cropCanvas.height = h;
+  cropCanvas.getContext('2d').drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);
+
+  var img = document.createElement('img');
+  img.id = 'cropped-barcode';
+  img.src = cropCanvas.toDataURL('image/jpeg', 0.95);
+  img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:12px;background:#fff;';
+  area.appendChild(img);
+
+  // placeholder 숨기기
+  ph.style.display = 'none';
+}
+
+// 사진에서 바코드 인식 + 크롭 표시
 function detectFromImage(img) {
   var det = initDetector();
   if (!det) { showToast('바코드 인식 미지원 - 직접 입력해줘'); return; }
@@ -767,30 +806,57 @@ function detectFromImage(img) {
 
   var variants = getCanvasVariants(canvas);
   var results = [];
+  var foundBox = null; // 바코드 위치 저장
 
-  // 모든 variant 순차 시도 후 자릿수 다수결
   function tryVariants(idx) {
     if (idx >= variants.length) {
       area.classList.remove('scanning');
+      setScanStatus('');
+
       if (results.length === 0) {
-        setScanStatus('');
         showToast('인식 실패 - 더 선명하게 다시 찍어봐');
+        // 실패 시 placeholder 복원
+        var ph = document.getElementById('cam-placeholder');
+        ph.style.display = '';
+        var txt = document.getElementById('cam-placeholder-text');
+        if (txt) txt.textContent = '다시 촬영하기';
         return;
       }
+
       var final = digitVoteMajority(results) || results[0];
-      setScanStatus('');
       setBarcode(final);
       showToast('바코드 인식 완료!');
-      // placeholder 업데이트
-      var ph = document.getElementById('cam-placeholder');
-      var txt = document.getElementById('cam-placeholder-text');
-      ph.classList.add('after-scan');
-      if (txt) txt.textContent = '다시 촬영하기';
+
+      // 바코드 크롭 이미지 표시
+      if (foundBox) {
+        showCroppedBarcode(canvas, foundBox);
+      } else {
+        // boundingBox 없으면 전체 사진 표시
+        var ph2 = document.getElementById('cam-placeholder');
+        ph2.classList.add('after-scan');
+        ph2.style.display = '';
+        var txt2 = document.getElementById('cam-placeholder-text');
+        if (txt2) txt2.textContent = '다시 촬영하기';
+      }
       return;
     }
+
     det.detect(variants[idx]).then(function(barcodes) {
       if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
         results.push(barcodes[0].rawValue);
+        // 첫 번째 바코드 위치 저장
+        if (!foundBox && barcodes[0].boundingBox) {
+          // 원본 canvas 기준으로 boundingBox 스케일 보정
+          var scaleX = canvas.width / variants[idx].width;
+          var scaleY = canvas.height / variants[idx].height;
+          var bb = barcodes[0].boundingBox;
+          foundBox = {
+            x: bb.x * scaleX,
+            y: bb.y * scaleY,
+            width: bb.width * scaleX,
+            height: bb.height * scaleY
+          };
+        }
       }
       tryVariants(idx + 1);
     }).catch(function() { tryVariants(idx + 1); });
@@ -804,9 +870,11 @@ function captureBarcode() {
 }
 
 function stopCamera() {
-  // 사진 방식이라 별도 stop 불필요
   document.getElementById('camera-area').classList.remove('scanning');
   setScanStatus('');
+  // 크롭 이미지 제거
+  var old = document.getElementById('cropped-barcode');
+  if (old) old.remove();
 }
 
 
