@@ -70,7 +70,6 @@ body{
   flex-shrink:0;
 }
 .app-title{font-size:calc(17px * var(--fs));font-weight:900;color:var(--accent);letter-spacing:-0.5px}
-.app-title span{color:var(--text);font-weight:400}
 .top-actions{display:flex;gap:6px;align-items:center}
 .icon-btn{
   background:var(--surface2);border:1px solid var(--border);
@@ -81,8 +80,9 @@ body{
 .font-ctrl{display:flex;gap:4px}
 .font-ctrl button{
   background:var(--surface2);border:1px solid var(--border);
-  border-radius:7px;padding:4px 9px;cursor:pointer;
-  font-size:calc(13px * var(--fs));color:var(--text);font-weight:700;
+  border-radius:7px;padding:0 10px;cursor:pointer;
+  font-size:calc(11px * var(--fs));color:var(--text);font-weight:700;
+  height:34px;display:flex;align-items:center;white-space:nowrap;
 }
 
 /* 탭 */
@@ -354,11 +354,11 @@ body{
 
   <!-- 탑바 -->
   <div id="topbar">
-    <div class="app-title">&#128230; <span>가족</span>편의점</div>
+    <div class="app-title">&#128230; 우리가족 편의점</div>
     <div class="top-actions">
       <div class="font-ctrl">
-        <button id="font-minus">A-</button>
-        <button id="font-plus">A+</button>
+        <button id="font-minus">글씨 작게</button>
+        <button id="font-plus">글씨 크게</button>
       </div>
       <div class="icon-btn" id="theme-btn">&#127769;</div>
     </div>
