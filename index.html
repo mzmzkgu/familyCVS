@@ -390,7 +390,7 @@ body{
           </div>
           <div class="form-row">
             <span class="form-label">바코드</span>
-            <div id="barcode-display" class="form-input" style="color:var(--text3)">바코드를 촬영하거나 직접 입력</div>
+            <div id="barcode-display" class="form-input" style="color:var(--text3);cursor:pointer" onclick="openManualModal()">바코드를 촬영하거나 직접 입력</div>
             <input type="text" id="barcode-hidden" style="display:none">
           </div>
           <div class="form-row">
@@ -510,7 +510,10 @@ body{
     </div>
     <div class="modal-body">
       <div class="card" style="margin:0 14px">
-        <div class="form-row"><span class="form-label">바코드</span><input type="text" class="form-input" id="manual-bc-input" placeholder="숫자 입력" inputmode="numeric"></div>
+        <div class="form-row">
+            <span class="form-label">바코드</span>
+            <input type="text" class="form-input" id="manual-bc-input" placeholder="숫자만 입력" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+          </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -561,6 +564,29 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('camera-area').addEventListener('click', handleCamTap);
   document.getElementById('capture-btn').addEventListener('click', triggerCamera);
   document.getElementById('manual-btn').addEventListener('click', openManualModal);
+
+  // 바코드 직접입력 - 숫자만 허용 (붙여넣기/자동완성 포함)
+  var bcInput = document.getElementById('manual-bc-input');
+  bcInput.addEventListener('input', function() {
+    var pos = this.selectionStart;
+    var cleaned = this.value.replace(/[^0-9]/g, '');
+    if (this.value !== cleaned) {
+      this.value = cleaned;
+      try { this.setSelectionRange(pos - 1, pos - 1); } catch(e) {}
+    }
+  });
+  bcInput.addEventListener('keydown', function(e) {
+    // 숫자, 백스페이스, 딜리트, 방향키, 탭, 엔터만 허용
+    var allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Enter','Home','End'];
+    if (allowed.indexOf(e.key) !== -1) {
+      if (e.key === 'Enter') applyManualBarcode();
+      return;
+    }
+    // Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X 허용
+    if (e.ctrlKey || e.metaKey) return;
+    // 숫자가 아니면 차단
+    if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+  });
 
   // 사진 선택 시 바코드 인식
   document.getElementById('cam-input').addEventListener('change', function(e) {
@@ -923,14 +949,21 @@ function setBarcode(code) {
 }
 
 function openManualModal() {
-  stopCamera();
+  // 카메라 관련 UI만 안전하게 초기화 (video 없어도 에러 안남)
+  document.getElementById('camera-area').classList.remove('scanning');
+  setScanStatus('');
+  var old = document.getElementById('cropped-barcode');
+  if (old) old.remove();
+  // 모달 열기
+  var input = document.getElementById('manual-bc-input');
+  input.value = '';
   openModal('modal-barcode');
-  setTimeout(function() { document.getElementById('manual-bc-input').focus(); }, 100);
+  setTimeout(function() { input.focus(); }, 150);
 }
 
 function applyManualBarcode() {
-  var val = document.getElementById('manual-bc-input').value.trim();
-  if (!val) { showToast('바코드를 입력해줘'); return; }
+  var val = document.getElementById('manual-bc-input').value.trim().replace(/[^0-9]/g, '');
+  if (!val) { showToast('숫자만 입력해줘'); return; }
   setBarcode(val);
   closeModal('modal-barcode');
   document.getElementById('manual-bc-input').value = '';
