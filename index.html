@@ -172,7 +172,18 @@ body{
 .sc.tr{top:15%;right:15%;border-width:3px 3px 0 0;border-radius:0 2px 0 0}
 .sc.bl{bottom:20%;left:15%;border-width:0 0 3px 3px;border-radius:0 0 0 2px}
 .sc.br{bottom:20%;right:15%;border-width:0 3px 3px 0;border-radius:0 0 2px 0}
-#qr-reader{ display:none !important; }
+#qr-reader{
+  position:absolute;inset:0;
+  width:100% !important;height:100% !important;
+  border:none !important;
+}
+#qr-reader video{
+  width:100% !important;height:100% !important;
+  object-fit:cover;border-radius:12px;
+}
+#qr-reader img{ display:none !important; }
+#qr-reader button{ display:none !important; }
+#qr-reader select{ display:none !important; }
 #focus-ring{
   position:absolute;width:56px;height:56px;
   border:2px solid #fff;border-radius:50%;
@@ -366,7 +377,6 @@ body{
     <!-- 등록 탭 -->
     <div class="tab-panel active" id="tab-register">
       <div id="camera-area">
-        <video id="video" autoplay playsinline muted></video>
         <div id="qr-reader"></div>
         <div id="cam-placeholder">
           <div class="ci">&#128247;</div>
@@ -719,7 +729,7 @@ function toggleCamera() {
     // 스트림 연결 후 줌 적용 시도
     setTimeout(function() {
       try {
-        var videoEl = area.querySelector('video');
+        var videoEl = document.querySelector('#qr-reader video');
         if (videoEl && videoEl.srcObject) {
           var track = videoEl.srcObject.getVideoTracks()[0];
           if (track) {
@@ -742,11 +752,9 @@ function toggleCamera() {
 }
 
 function captureBarcode() {
-  // 현재 프레임 캡처해서 인식 시도
   if (!html5QrCode) { showToast('카메라를 먼저 켜줘'); return; }
   try {
-    var area = document.getElementById('camera-area');
-    var videoEl = area.querySelector('video');
+    var videoEl = document.querySelector('#qr-reader video');
     if (!videoEl) { showToast('인식 실패 - 직접 입력해줘'); return; }
     var canvas = document.createElement('canvas');
     canvas.width = videoEl.videoWidth;
