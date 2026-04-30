@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>가족 편의점 📦</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+
+  :root {
+    --bg: #f5f5f0;
+    --bg2: #ebebе5;
+    --surface: #ffffff;
+    --surface2: #f0f0ea;
+    --border: #d8d8d0;
+    --text: #1a1a1a;
+    --text2: #666660;
+    --text3: #999990;
+    --accent: #2d6a4f;
+    --accent2: #40916c;
+    --accent-light: #d8f3dc;
+    --red: #e63946;
+    --red-light: #fdecea;
+    --yellow: #f4a261;
+    --shadow: rgba(0,0,0,0.08);
+    --tab-h: 56px;
+    --font-scale: 1;
+  }
+  [data-theme="dark"] {
+    --bg: #141414;
+    --bg2: #1e1e1e;
+    --surface: #242424;
+    --surface2: #2e2e2e;
+    --border: #3a3a3a;
+    --text: #f0f0ea;
+    --text2: #aaaaaa;
+    --text3: #666660;
+    --accent: #52b788;
+    --accent2: #74c69d;
+    --accent-light: #1b3a2a;
+    --red: #ff6b6b;
+    --red-light: #2e1a1a;
+    --yellow: #f4a261;
+    --shadow: rgba(0,0,0,0.3);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(14px * var(--font-scale));
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 레이아웃 ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    position: relative;
+    background: var(--bg);
+  }
+
+  /* ── 탑바 ── */
+  #topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px 6px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #topbar .title {
+    font-size: calc(17px * var(--font-scale));
+    font-weight: 900;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  #topbar .title span { color: var(--text); font-weight: 400; }
+  .top-actions { display: flex; gap: 6px; align-items: center; }
+  .icon-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px;
+    transition: all 0.15s;
+    color: var(--text);
+  }
+  .icon-btn:active { transform: scale(0.92); }
+  .font-ctrl { display: flex; gap: 4px; }
+  .font-ctrl button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 4px 9px;
+    cursor: pointer;
+    font-size: calc(13px * var(--font-scale));
+    color: var(--text);
+    font-weight: 700;
+    transition: all 0.15s;
+  }
+  .font-ctrl button:active { background: var(--accent-light); color: var(--accent); }
+
+  /* ── 탭 ── */
+  #tabs {
+    display: flex;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    height: var(--tab-h);
+  }
+  .tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(13px * var(--font-scale));
+    font-weight: 700;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px;
+    transition: color 0.2s;
+    position: relative;
+  }
+  .tab-btn .tab-icon { font-size: 18px; }
+  .tab-btn.active { color: var(--accent); }
+  .tab-btn.active::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 20%; right: 20%;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 0 0 4px 4px;
+  }
+
+  /* ── 탭 콘텐츠 ── */
+  #content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .tab-panel {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tab-panel.active { display: flex; }
+
+  /* ── 공통 ── */
+  .section-title {
+    font-size: calc(11px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 10px 16px 4px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 0 12px 10px;
+    overflow: hidden;
+  }
+  .form-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    min-height: 48px;
+  }
+  .form-row:last-child { border-bottom: none; }
+  .form-label {
+    font-size: calc(13px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text2);
+    width: 52px;
+    flex-shrink: 0;
+  }
+  .form-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(14px * var(--font-scale));
+    color: var(--text);
+    outline: none;
+    min-width: 0;
+  }
+  .form-input::placeholder { color: var(--text3); }
+  input[type="date"].form-input { color: var(--text); }
+
+  .btn-primary {
+    display: block;
+    width: calc(100% - 24px);
+    margin: 0 12px 10px;
+    padding: 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(15px * var(--font-scale));
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: -0.3px;
+  }
+  .btn-primary:active { transform: scale(0.98); opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── 등록 탭 ── */
+  #tab-register {
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  #tab-register.active { display: flex; }
+
+  #camera-area {
+    margin: 10px 12px 6px;
+    background: var(--surface2);
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+    height: 160px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  #camera-area:hover { border-color: var(--accent); }
+  #camera-area video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: none;
+    border-radius: 12px;
+  }
+  #camera-area.active video { display: block; }
+  #camera-placeholder {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 6px; color: var(--text3);
+  }
+  #camera-area.active #camera-placeholder { display: none; }
+  #camera-placeholder .cam-icon { font-size: 36px; }
+  #camera-placeholder p { font-size: calc(12px * var(--font-scale)); font-weight: 700; }
+  #scan-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+  #camera-area.active #scan-overlay { display: block; }
+  .scan-line {
+    position: absolute;
+    left: 15%; right: 15%;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: scanMove 2s ease-in-out infinite;
+  }
+  @keyframes scanMove {
+    0%   { top: 20%; }
+    50%  { top: 75%; }
+    100% { top: 20%; }
+  }
+  .scan-corner {
+    position: absolute; width: 20px; height: 20px;
+    border-color: var(--accent); border-style: solid;
+  }
+  .scan-corner.tl { top: 15%; left: 15%; border-width: 3px 0 0 3px; border-radius: 2px 0 0 0; }
+  .scan-corner.tr { top: 15%; right: 15%; border-width: 3px 3px 0 0; border-radius: 0 2px 0 0; }
+  .scan-corner.bl { bottom: 20%; left: 15%; border-width: 0 0 3px 3px; border-radius: 0 0 0 2px; }
+  .scan-corner.br { bottom: 20%; right: 15%; border-width: 0 3px 3px 0; border-radius: 0 0 2px 0; }
+
+  #cam-btn-row {
+    display: flex; gap: 8px;
+    padding: 0 12px 6px;
+    flex-shrink: 0;
+  }
+  .cam-action-btn {
+    flex: 1; padding: 10px 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 10px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(12px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    transition: all 0.15s;
+  }
+  .cam-action-btn:active { transform: scale(0.96); }
+  .cam-action-btn.green { background: var(--accent-light); color: var(--accent); border-color: var(--accent2); }
+
+  #register-form { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* 바코드 포맷 */
+  .barcode-display {
+    font-weight: 700;
+    font-size: calc(14px * var(--font-scale));
+    letter-spacing: 0.5px;
+  }
+  .barcode-display .bc-red { color: var(--red); }
+  .barcode-display .bc-mid { color: var(--text3); }
+
+  /* 수량 조절 */
+  .qty-ctrl { display: flex; align-items: center; gap: 10px; }
+  .qty-btn {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-size: 18px; font-weight: 700;
+    color: var(--accent);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .qty-btn:active { transform: scale(0.9); }
+  #qty-input {
+    width: 50px; text-align: center;
+    font-size: calc(16px * var(--font-scale));
+    font-weight: 700;
+  }
+
+  /* ── 기록 탭 ── */
+  #tab-records.active { display: flex; }
+  #records-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0 10px;
+  }
+  .date-group { margin-bottom: 6px; }
+  .date-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    margin: 0 12px 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+  }
+  .date-header:active { background: var(--surface2); }
+  .date-header .dh-left { display: flex; align-items: center; gap: 8px; }
+  .date-header .dh-date {
+    font-size: calc(14px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text);
+  }
+  .date-header .dh-count {
+    font-size: calc(11px * var(--font-scale));
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 700;
+  }
+  .date-header .dh-arrow {
+    color: var(--text3); font-size: 14px;
+    transition: transform 0.2s;
+  }
+  .date-header.open .dh-arrow { transform: rotate(180deg); }
+  .date-items { display: none; padding: 0 12px; }
+  .date-items.open { display: block; }
+  .record-item {
+    display: flex; align-items: center;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 4px;
+    gap: 8px;
+  }
+  .record-item .ri-bc {
+    font-size: calc(11px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text3);
+    flex-shrink: 0;
+    min-width: 0;
+  }
+  .ri-bc .bc-red { color: var(--red); }
+  .record-item .ri-name {
+    flex: 1;
+    font-size: calc(13px * var(--font-scale));
+    font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .record-item .ri-qty {
+    font-size: calc(13px * var(--font-scale));
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+    min-width: 28px;
+    text-align: right;
+  }
+  .ri-edit-btn {
+    flex-shrink: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: calc(11px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ri-edit-btn:active { background: var(--accent-light); color: var(--accent); }
+
+  /* ── 공유메모 탭 ── */
+  #tab-memos.active { display: flex; }
+  #memos-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0 0;
+    min-height: 0;
+  }
+  .memo-item {
+    display: flex; align-items: center;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 0 12px 4px;
+    gap: 8px;
+  }
+  .mi-date {
+    font-size: calc(11px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text3);
+    flex-shrink: 0;
+    width: 44px;
+  }
+  .mi-author {
+    font-size: calc(12px * var(--font-scale));
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+    width: 30px;
+  }
+  .mi-text {
+    flex: 1;
+    font-size: calc(13px * var(--font-scale));
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .mi-edit-btn {
+    flex-shrink: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: calc(11px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text2);
+    cursor: pointer;
+  }
+  .more-btn {
+    display: flex; align-items: center; justify-content: center;
+    margin: 4px 12px 8px;
+    padding: 9px;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    font-size: calc(12px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text2);
+    cursor: pointer;
+  }
+
+  /* 메모 등록 하단 고정 */
+  #memo-form-area {
+    flex-shrink: 0;
+    border-top: 2px solid var(--border);
+    background: var(--surface);
+    padding: 8px 0 6px;
+  }
+  .memo-form-title {
+    font-size: calc(12px * var(--font-scale));
+    font-weight: 700;
+    color: var(--text3);
+    padding: 0 14px 6px;
+    letter-spacing: 0.5px;
+  }
+  #memo-content-input {
+    width: calc(100% - 28px);
+    margin: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(13px * var(--font-scale));
+    color: var(--text);
+    background: var(--surface2);
+    outline: none;
+    resize: none;
+    height: 44px;
+  }
+  .memo-meta-row {
+    display: flex; gap: 8px; align-items: center;
+    padding: 6px 14px;
+  }
+  .memo-date-input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(12px * var(--font-scale));
+    color: var(--text);
+    background: var(--surface2);
+    outline: none;
+  }
+  .author-select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(12px * var(--font-scale));
+    color: var(--text);
+    background: var(--surface2);
+    outline: none;
+    cursor: pointer;
+  }
+  .memo-submit-btn {
+    display: block;
+    width: calc(100% - 28px);
+    margin: 0 14px;
+    padding: 11px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(14px * var(--font-scale));
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .memo-submit-btn:active { transform: scale(0.98); }
+
+  /* ── 모달 ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 16px;
+    display: none;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface);
+    border-radius: 16px;
+    width: 100%; max-width: 380px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal-header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-size: calc(16px * var(--font-scale)); font-weight: 900; color: var(--text); }
+  .modal-close {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px; color: var(--text2);
+  }
+  .modal-body { padding: 12px 0; }
+  .modal-footer {
+    display: flex; gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+  }
+  .modal-btn {
+    flex: 1; padding: 12px;
+    border-radius: 10px; border: 1px solid var(--border);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: calc(14px * var(--font-scale));
+    font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .modal-btn.cancel { background: var(--surface2); color: var(--text2); }
+  .modal-btn.save { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .modal-btn.delete { background: var(--red-light); color: var(--red); border-color: var(--red); }
+  .modal-btn:active { transform: scale(0.97); }
+
+  /* ── 토스트 ── */
+  #toast {
+    position: fixed;
+    bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1a1a1a; color: #fff;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: calc(13px * var(--font-scale));
+    font-weight: 700;
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 200;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── 로딩 ── */
+  .loading-row {
+    display: flex; align-items: center; justify-content: center;
+    padding: 30px; color: var(--text3);
+    font-size: calc(13px * var(--font-scale));
+    gap: 8px;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 스크롤바 */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* 문자 입력 char count */
+  .char-count {
+    font-size: calc(11px * var(--font-scale));
+    color: var(--text3);
+    text-align: right;
+    padding: 2px 14px 0;
+  }
+  .char-count.warn { color: var(--red); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- 탑바 -->
+  <div id="topbar">
+    <div class="title">📦 <span>가족</span>편의점</div>
+    <div class="top-actions">
+      <div class="font-ctrl">
+        <button onclick="changeFont(-1)">A-</button>
+        <button onclick="changeFont(1)">A+</button>
+      </div>
+      <div class="icon-btn" onclick="toggleTheme()" id="theme-btn">🌙</div>
+    </div>
+  </div>
+
+  <!-- 콘텐츠 -->
+  <div id="content">
+
+    <!-- 등록 탭 -->
+    <div class="tab-panel active" id="tab-register">
+
+      <!-- 카메라 영역 -->
+      <div id="camera-area" onclick="toggleCamera()">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="camera-placeholder">
+          <div class="cam-icon">📷</div>
+          <p>여기를 눌러서 카메라 촬영</p>
+        </div>
+        <div id="scan-overlay">
+          <div class="scan-line"></div>
+          <div class="scan-corner tl"></div>
+          <div class="scan-corner tr"></div>
+          <div class="scan-corner bl"></div>
+          <div class="scan-corner br"></div>
+        </div>
+      </div>
+
+      <!-- 카메라 버튼 -->
+      <div id="cam-btn-row">
+        <button class="cam-action-btn" id="capture-btn" onclick="captureBarcode()" style="display:none">
+          📸 촬영
+        </button>
+        <button class="cam-action-btn" onclick="stopCamera()" id="stop-cam-btn" style="display:none">
+          ✕ 닫기
+        </button>
+        <button class="cam-action-btn" onclick="manualInput()">
+          ✏️ 직접입력
+        </button>
+      </div>
+
+      <!-- 입력 폼 -->
+      <div id="register-form">
+        <div class="card">
+          <div class="form-row">
+            <span class="form-label">등록일</span>
+            <input type="date" class="form-input" id="reg-date">
+          </div>
+          <div class="form-row">
+            <span class="form-label">바코드</span>
+            <div id="barcode-display" class="barcode-display form-input" style="color:var(--text3);font-size:calc(13px * var(--font-scale))">바코드를 촬영하거나 직접 입력</div>
+            <input type="text" id="barcode-hidden" style="display:none">
+          </div>
+          <div class="form-row">
+            <span class="form-label">제품명</span>
+            <input type="text" class="form-input" id="reg-name" placeholder="제품명 입력">
+          </div>
+          <div class="form-row">
+            <span class="form-label">수량</span>
+            <div class="qty-ctrl">
+              <button class="qty-btn" onclick="changeQty(-1)">−</button>
+              <input type="number" class="form-input" id="qty-input" value="1" min="1" max="999" style="width:50px;text-align:center;font-weight:700">
+              <button class="qty-btn" onclick="changeQty(1)">+</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn-primary" onclick="submitRecord()" id="reg-submit-btn">✅ 등록하기</button>
+      </div>
+    </div>
+
+    <!-- 기록 탭 -->
+    <div class="tab-panel" id="tab-records">
+      <div id="records-list">
+        <div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>
+      </div>
+    </div>
+
+    <!-- 공유메모 탭 -->
+    <div class="tab-panel" id="tab-memos">
+      <div id="memos-scroll">
+        <p class="section-title">📋 공유메모</p>
+        <div id="memos-list">
+          <div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>
+        </div>
+        <button class="more-btn" id="more-btn" onclick="loadMoreMemos()" style="display:none">
+          더 보기 ▾
+        </button>
+      </div>
+
+      <!-- 메모 등록 고정 영역 -->
+      <div id="memo-form-area">
+        <p class="memo-form-title">메모 등록</p>
+        <div class="memo-meta-row">
+          <input type="date" class="memo-date-input" id="memo-date">
+          <select class="author-select" id="memo-author">
+            <option>아빠</option>
+            <option>엄마</option>
+            <option>강욱</option>
+            <option>진욱</option>
+          </select>
+        </div>
+        <textarea id="memo-content-input" placeholder="메모 내용 (최대 50자)" maxlength="50" oninput="updateCharCount()"></textarea>
+        <p class="char-count" id="char-count">0 / 50</p>
+        <div style="padding: 6px 0 0;">
+          <button class="memo-submit-btn" onclick="submitMemo()">메모 등록</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- 탭 바 -->
+  <div id="tabs">
+    <button class="tab-btn active" onclick="switchTab('register', this)">
+      <span class="tab-icon">📝</span>등록
+    </button>
+    <button class="tab-btn" onclick="switchTab('records', this)">
+      <span class="tab-icon">📋</span>기록
+    </button>
+    <button class="tab-btn" onclick="switchTab('memos', this)">
+      <span class="tab-icon">💬</span>공유메모
+    </button>
+  </div>
+</div>
+
+<!-- 수정 모달 (기록) -->
+<div class="modal-overlay" id="edit-record-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">기록 수정</span>
+      <div class="modal-close" onclick="closeModal('edit-record-modal')">✕</div>
+    </div>
+    <div class="modal-body">
+      <div class="card" style="margin:0 14px;">
+        <div class="form-row">
+          <span class="form-label">등록일</span>
+          <input type="date" class="form-input" id="edit-date">
+        </div>
+        <div class="form-row">
+          <span class="form-label">바코드</span>
+          <input type="text" class="form-input" id="edit-barcode" placeholder="바코드">
+        </div>
+        <div class="form-row">
+          <span class="form-label">제품명</span>
+          <input type="text" class="form-input" id="edit-name" placeholder="제품명">
+        </div>
+        <div class="form-row">
+          <span class="form-label">수량</span>
+          <input type="number" class="form-input" id="edit-qty" min="1">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn delete" onclick="deleteRecord()">삭제</button>
+      <button class="modal-btn cancel" onclick="closeModal('edit-record-modal')">취소</button>
+      <button class="modal-btn save" onclick="saveRecord()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 수정 모달 (메모) -->
+<div class="modal-overlay" id="edit-memo-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">메모 수정</span>
+      <div class="modal-close" onclick="closeModal('edit-memo-modal')">✕</div>
+    </div>
+    <div class="modal-body">
+      <div class="card" style="margin:0 14px;">
+        <div class="form-row">
+          <span class="form-label">등록일</span>
+          <input type="date" class="form-input" id="edit-memo-date">
+        </div>
+        <div class="form-row">
+          <span class="form-label">등록자</span>
+          <select class="form-input author-select" id="edit-memo-author" style="border:none;background:transparent;">
+            <option>아빠</option><option>엄마</option><option>강욱</option><option>진욱</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <span class="form-label">메모</span>
+          <input type="text" class="form-input" id="edit-memo-text" maxlength="50" placeholder="최대 50자">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn delete" onclick="deleteMemo()">삭제</button>
+      <button class="modal-btn cancel" onclick="closeModal('edit-memo-modal')">취소</button>
+      <button class="modal-btn save" onclick="saveMemo()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 바코드 직접 입력 모달 -->
+<div class="modal-overlay" id="manual-barcode-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">바코드 직접 입력</span>
+      <div class="modal-close" onclick="closeModal('manual-barcode-modal')">✕</div>
+    </div>
+    <div class="modal-body">
+      <div class="card" style="margin:0 14px;">
+        <div class="form-row">
+          <span class="form-label">바코드</span>
+          <input type="text" class="form-input" id="manual-barcode-input" placeholder="숫자 입력" inputmode="numeric">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn cancel" onclick="closeModal('manual-barcode-modal')">취소</button>
+      <button class="modal-btn save" onclick="applyManualBarcode()">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 -->
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbx1_8hRq2I1RVGPQ0Ba5X9fs5roOgp21heuXxXVisg6H7iqq04iuV8R16QjfPgBNMTPGg/exec';
+
+// ── 상태 ──
+let allRecords = [];
+let allMemos = [];
+let products = {};
+let editingRecord = null;
+let editingMemo = null;
+let cameraActive = false;
+let codeReader = null;
+let scanControls = null;
+let fontScale = parseFloat(localStorage.getItem('fontScale') || '1');
+let isDark = localStorage.getItem('theme') === 'dark';
+let memosVisible = 7;
+
+// ── 초기화 ──
+window.onload = () => {
+  applyTheme();
+  applyFont();
+  setToday('reg-date');
+  setToday('memo-date');
+  loadProducts();
+  loadRecords();
+  loadMemos();
+};
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+function setToday(id) {
+  document.getElementById(id).value = today();
+}
+
+// ── 테마 ──
+function toggleTheme() {
+  isDark = !isDark;
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  applyTheme();
+}
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+}
+
+// ── 폰트 ──
+function changeFont(d) {
+  fontScale = Math.min(1.4, Math.max(0.7, fontScale + d * 0.1));
+  fontScale = Math.round(fontScale * 10) / 10;
+  localStorage.setItem('fontScale', fontScale);
+  applyFont();
+}
+function applyFont() {
+  document.documentElement.style.setProperty('--font-scale', fontScale);
+}
+
+// ── 탭 ──
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'records') loadRecords();
+  if (name === 'memos') loadMemos();
+}
+
+// ── API ──
+async function api(params) {
+  const url = API_URL + '?' + new URLSearchParams({ action: params.action });
+  const method = params.action.startsWith('get') ? 'GET' : 'POST';
+  const opts = { method };
+  if (method === 'POST') {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(params);
+  }
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+// ── 카메라 / 바코드 ──
+async function toggleCamera() {
+  if (cameraActive) return;
+  const area = document.getElementById('camera-area');
+  const video = document.getElementById('video');
+  const captureBtn = document.getElementById('capture-btn');
+  const stopBtn = document.getElementById('stop-cam-btn');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    area.classList.add('active');
+    cameraActive = true;
+    captureBtn.style.display = 'flex';
+    stopBtn.style.display = 'flex';
+
+    // zxing 자동 인식 시도
+    try {
+      const hints = new Map();
+      const formats = [
+        ZXingBrowser.BarcodeFormat.EAN_13,
+        ZXingBrowser.BarcodeFormat.EAN_8,
+        ZXingBrowser.BarcodeFormat.CODE_128,
+        ZXingBrowser.BarcodeFormat.UPC_A
+      ];
+      hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, formats);
+      codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+      scanControls = await codeReader.decodeFromVideoElement(video, (result, err) => {
+        if (result) {
+          setBarcode(result.getText());
+          stopCamera();
+          showToast('✅ 바코드 인식 완료!');
+        }
+      });
+    } catch(e) {
+      // zxing 없거나 실패 시 수동 캡처만 지원
+    }
+  } catch(e) {
+    showToast('❌ 카메라 권한이 필요해요');
+  }
+}
+
+function captureBarcode() {
+  // 수동 촬영 시도 - canvas로 캡처 후 zxing decode
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  if (codeReader) {
+    try {
+      const imageData = canvas.toDataURL('image/jpeg');
+      codeReader.decodeFromImageUrl(imageData).then(result => {
+        setBarcode(result.getText());
+        stopCamera();
+        showToast('✅ 바코드 인식 완료!');
+      }).catch(() => {
+        showToast('⚠️ 인식 실패 - 직접 입력해줘');
+      });
+    } catch(e) {
+      showToast('⚠️ 인식 실패 - 직접 입력해줘');
+    }
+  }
+}
+
+function stopCamera() {
+  const video = document.getElementById('video');
+  const area = document.getElementById('camera-area');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  if (scanControls) { try { scanControls.stop(); } catch(e){} scanControls = null; }
+  area.classList.remove('active');
+  cameraActive = false;
+  document.getElementById('capture-btn').style.display = 'none';
+  document.getElementById('stop-cam-btn').style.display = 'none';
+}
+
+function setBarcode(code) {
+  document.getElementById('barcode-hidden').value = code;
+  renderBarcodeDisplay(code);
+  // products DB에서 제품명 자동 완성
+  if (products[code]) {
+    document.getElementById('reg-name').value = products[code];
+  }
+}
+
+function renderBarcodeDisplay(code) {
+  if (!code) return;
+  const el = document.getElementById('barcode-display');
+  const len = code.length;
+  if (len >= 6) {
+    const p1 = code.slice(0, 3);
+    const mid = code.slice(3, len - 3);
+    const p2 = code.slice(len - 3);
+    el.innerHTML = `<span class="bc-red">${p1}</span><span class="bc-mid">${mid.length > 3 ? '...' : mid}</span><span class="bc-red">${p2}</span>`;
+  } else {
+    el.textContent = code;
+  }
+}
+
+function manualInput() {
+  stopCamera();
+  openModal('manual-barcode-modal');
+  setTimeout(() => document.getElementById('manual-barcode-input').focus(), 100);
+}
+
+function applyManualBarcode() {
+  const val = document.getElementById('manual-barcode-input').value.trim();
+  if (!val) { showToast('바코드를 입력해줘'); return; }
+  setBarcode(val);
+  closeModal('manual-barcode-modal');
+  document.getElementById('manual-barcode-input').value = '';
+}
+
+// ── 등록 제출 ──
+async function submitRecord() {
+  const date = document.getElementById('reg-date').value;
+  const barcode = document.getElementById('barcode-hidden').value.trim();
+  const name = document.getElementById('reg-name').value.trim();
+  const qty = parseInt(document.getElementById('qty-input').value) || 1;
+
+  if (!date) { showToast('날짜를 입력해줘'); return; }
+  if (!barcode && !name) { showToast('바코드 또는 제품명을 입력해줘'); return; }
+
+  const btn = document.getElementById('reg-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '등록 중...';
+
+  try {
+    await api({ action: 'addRecord', 등록일: date, 바코드: barcode, 제품명: name, 수량: qty });
+    showToast('✅ 등록 완료!');
+    // 초기화
+    document.getElementById('barcode-hidden').value = '';
+    document.getElementById('barcode-display').innerHTML = '<span style="color:var(--text3);font-size:calc(13px * var(--font-scale))">바코드를 촬영하거나 직접 입력</span>';
+    document.getElementById('reg-name').value = '';
+    document.getElementById('qty-input').value = '1';
+    setToday('reg-date');
+    loadProducts();
+  } catch(e) {
+    showToast('❌ 등록 실패 - 다시 시도해줘');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✅ 등록하기';
+  }
+}
+
+function changeQty(d) {
+  const input = document.getElementById('qty-input');
+  input.value = Math.max(1, (parseInt(input.value) || 1) + d);
+}
+
+// ── Products DB ──
+async function loadProducts() {
+  try {
+    const data = await api({ action: 'getProducts' });
+    products = {};
+    (data || []).forEach(p => { if (p.바코드) products[p.바코드] = p.제품명; });
+  } catch(e) {}
+}
+
+// ── 기록 ──
+async function loadRecords() {
+  const list = document.getElementById('records-list');
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>';
+  try {
+    allRecords = await api({ action: 'getRecords' });
+    renderRecords();
+  } catch(e) {
+    list.innerHTML = '<div class="loading-row">❌ 불러오기 실패</div>';
+  }
+}
+
+function renderRecords() {
+  const list = document.getElementById('records-list');
+  if (!allRecords.length) {
+    list.innerHTML = '<div class="loading-row" style="color:var(--text3)">📭 기록이 없어</div>';
+    return;
+  }
+
+  // 날짜별 그룹핑
+  const groups = {};
+  allRecords.forEach(r => {
+    const d = r['등록일'] || '날짜 없음';
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(r);
+  });
+
+  // 날짜 내림차순 정렬
+  const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+  const latestDate = sortedDates[0];
+
+  list.innerHTML = '';
+  sortedDates.forEach(date => {
+    const items = groups[date];
+    const isLatest = date === latestDate;
+
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'date-group';
+
+    const header = document.createElement('div');
+    header.className = 'date-header' + (isLatest ? ' open' : '');
+    header.innerHTML = `
+      <div class="dh-left">
+        <span class="dh-date">${formatDate(date)}</span>
+        <span class="dh-count">${items.length}개</span>
+      </div>
+      <span class="dh-arrow">▼</span>
+    `;
+
+    const itemsDiv = document.createElement('div');
+    itemsDiv.className = 'date-items' + (isLatest ? ' open' : '');
+
+    items.forEach(r => {
+      const bc = r['바코드'] || '';
+      const itemEl = document.createElement('div');
+      itemEl.className = 'record-item';
+      itemEl.innerHTML = `
+        <span class="ri-bc">${formatBarcodeShort(bc)}</span>
+        <span class="ri-name">${r['제품명'] || '-'}</span>
+        <span class="ri-qty">${r['수량'] || 0}</span>
+        <button class="ri-edit-btn" onclick="openEditRecord(${JSON.stringify(r).replace(/"/g, '&quot;')})">수정</button>
+      `;
+      itemsDiv.appendChild(itemEl);
+    });
+
+    header.onclick = () => {
+      header.classList.toggle('open');
+      itemsDiv.classList.toggle('open');
+    };
+
+    groupDiv.appendChild(header);
+    groupDiv.appendChild(itemsDiv);
+    list.appendChild(groupDiv);
+  });
+}
+
+function formatDate(d) {
+  if (!d || d.length < 10) return d;
+  const dt = new Date(d + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  return `${d} (${days[dt.getDay()]})`;
+}
+
+function formatBarcodeShort(bc) {
+  if (!bc || bc.length < 6) return bc;
+  const p1 = bc.slice(0, 3);
+  const p2 = bc.slice(-3);
+  return `<span class="bc-red">${p1}</span>···<span class="bc-red">${p2}</span>`;
+}
+
+function openEditRecord(r) {
+  editingRecord = r;
+  document.getElementById('edit-date').value = r['등록일'] || today();
+  document.getElementById('edit-barcode').value = r['바코드'] || '';
+  document.getElementById('edit-name').value = r['제품명'] || '';
+  document.getElementById('edit-qty').value = r['수량'] || 1;
+  openModal('edit-record-modal');
+}
+
+async function saveRecord() {
+  if (!editingRecord) return;
+  const updated = {
+    action: 'updateRecord',
+    _row: editingRecord._row,
+    등록일: document.getElementById('edit-date').value,
+    바코드: document.getElementById('edit-barcode').value,
+    제품명: document.getElementById('edit-name').value,
+    수량: parseInt(document.getElementById('edit-qty').value) || 1,
+  };
+  try {
+    await api(updated);
+    showToast('✅ 수정 완료!');
+    closeModal('edit-record-modal');
+    loadRecords();
+  } catch(e) { showToast('❌ 수정 실패'); }
+}
+
+async function deleteRecord() {
+  if (!editingRecord) return;
+  if (!confirm('이 기록을 삭제할까?')) return;
+  try {
+    await api({ action: 'deleteRecord', _row: editingRecord._row });
+    showToast('🗑️ 삭제 완료!');
+    closeModal('edit-record-modal');
+    loadRecords();
+  } catch(e) { showToast('❌ 삭제 실패'); }
+}
+
+// ── 메모 ──
+async function loadMemos() {
+  const list = document.getElementById('memos-list');
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div> 불러오는 중...</div>';
+  try {
+    const data = await api({ action: 'getMemos' });
+    allMemos = (data || []).sort((a, b) => (b['등록일'] || '').localeCompare(a['등록일'] || ''));
+    memosVisible = calcVisibleMemos();
+    renderMemos();
+  } catch(e) {
+    list.innerHTML = '<div class="loading-row">❌ 불러오기 실패</div>';
+  }
+}
+
+function calcVisibleMemos() {
+  return fontScale <= 0.8 ? 10 : 7;
+}
+
+function renderMemos() {
+  const list = document.getElementById('memos-list');
+  const moreBtn = document.getElementById('more-btn');
+  const showing = allMemos.slice(0, memosVisible);
+  list.innerHTML = '';
+
+  if (!allMemos.length) {
+    list.innerHTML = '<div class="loading-row" style="color:var(--text3)">📭 메모가 없어</div>';
+    moreBtn.style.display = 'none';
+    return;
+  }
+
+  showing.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'memo-item';
+    el.innerHTML = `
+      <span class="mi-date">${shortDate(m['등록일'])}</span>
+      <span class="mi-author">${m['등록자'] || ''}</span>
+      <span class="mi-text">${escHtml(m['메모'] || '')}</span>
+      <button class="mi-edit-btn" onclick="openEditMemo(${JSON.stringify(m).replace(/"/g, '&quot;')})">수정</button>
+    `;
+    list.appendChild(el);
+  });
+
+  const remaining = allMemos.length - memosVisible;
+  if (remaining > 0) {
+    moreBtn.style.display = 'flex';
+    moreBtn.textContent = `더 보기 (${remaining}개) ▾`;
+  } else {
+    moreBtn.style.display = 'none';
+  }
+}
+
+function loadMoreMemos() {
+  memosVisible += 10;
+  renderMemos();
+  // 더 보기 후 스크롤 허용
+  document.getElementById('memos-scroll').style.overflowY = 'auto';
+}
+
+function shortDate(d) {
+  if (!d || d.length < 10) return d || '';
+  const dt = new Date(d + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  return `${dt.getMonth()+1}/${dt.getDate()}(${days[dt.getDay()]})`;
+}
+
+function updateCharCount() {
+  const ta = document.getElementById('memo-content-input');
+  const cc = document.getElementById('char-count');
+  const len = ta.value.length;
+  cc.textContent = `${len} / 50`;
+  cc.className = 'char-count' + (len >= 45 ? ' warn' : '');
+}
+
+async function submitMemo() {
+  const date = document.getElementById('memo-date').value;
+  const author = document.getElementById('memo-author').value;
+  const content = document.getElementById('memo-content-input').value.trim();
+  if (!content) { showToast('메모 내용을 입력해줘'); return; }
+  try {
+    await api({ action: 'addMemo', 등록일: date, 등록자: author, 메모: content });
+    showToast('✅ 메모 등록 완료!');
+    document.getElementById('memo-content-input').value = '';
+    updateCharCount();
+    loadMemos();
+  } catch(e) { showToast('❌ 등록 실패'); }
+}
+
+function openEditMemo(m) {
+  editingMemo = m;
+  document.getElementById('edit-memo-date').value = m['등록일'] || today();
+  document.getElementById('edit-memo-author').value = m['등록자'] || '아빠';
+  document.getElementById('edit-memo-text').value = m['메모'] || '';
+  openModal('edit-memo-modal');
+}
+
+async function saveMemo() {
+  if (!editingMemo) return;
+  try {
+    await api({
+      action: 'updateMemo',
+      _row: editingMemo._row,
+      등록일: document.getElementById('edit-memo-date').value,
+      등록자: document.getElementById('edit-memo-author').value,
+      메모: document.getElementById('edit-memo-text').value,
+    });
+    showToast('✅ 수정 완료!');
+    closeModal('edit-memo-modal');
+    loadMemos();
+  } catch(e) { showToast('❌ 수정 실패'); }
+}
+
+async function deleteMemo() {
+  if (!editingMemo) return;
+  if (!confirm('이 메모를 삭제할까?')) return;
+  try {
+    await api({ action: 'deleteMemo', _row: editingMemo._row });
+    showToast('🗑️ 삭제 완료!');
+    closeModal('edit-memo-modal');
+    loadMemos();
+  } catch(e) { showToast('❌ 삭제 실패'); }
+}
+
+// ── 모달 ──
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// ── 토스트 ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── 유틸 ──
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
