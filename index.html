@@ -693,12 +693,23 @@ var scanLoop = null;
 var detector = null;
 
 function handleCamTap(e) {
-  if (!cameraActive) { toggleCamera(); }
-}
-
-function toggleCamera() {
   triggerCamera();
 }
+
+function triggerCamera() {
+  document.getElementById('cam-input').click();
+}
+
+function initDetector() {
+  if (detector) return detector;
+  if (!('BarcodeDetector' in window)) return null;
+  detector = new BarcodeDetector({
+    formats: ['ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'code_39']
+  });
+  return detector;
+}
+
+
 
 // 자릿수별 다수결
 function digitVoteMajority(candidates) {
