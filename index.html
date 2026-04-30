@@ -756,32 +756,63 @@ function toggleCamera() {
   });
 }
 
-function preprocessCanvas(srcCanvas) {
-  // 대비/선명도 강화로 앞자리 인식률 향상
-  var dst = document.createElement('canvas');
-  dst.width = srcCanvas.width;
-  dst.height = srcCanvas.height;
-  var ctx = dst.getContext('2d');
-  ctx.drawImage(srcCanvas, 0, 0);
-  var imgData = ctx.getImageData(0, 0, dst.width, dst.height);
-  var d = imgData.data;
-  for (var i = 0; i < d.length; i += 4) {
-    // 그레이스케일 변환
-    var gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-    // 대비 강화 (factor 1.6)
-    var contrast = 1.6;
-    gray = Math.min(255, Math.max(0, (gray - 128) * contrast + 128));
-    d[i] = d[i+1] = d[i+2] = gray;
+// 자릿수별 다수결로 최종 바코드 확정
+function digitVoteMajority(candidates) {
+  if (!candidates || candidates.length === 0) return null;
+  var len = candidates[0].length;
+  // 길이가 다른 건 제외
+  candidates = candidates.filter(function(c) { return c.length === len; });
+  if (candidates.length === 0) return null;
+  var result = '';
+  for (var i = 0; i < len; i++) {
+    var freq = {};
+    candidates.forEach(function(c) {
+      var ch = c[i];
+      freq[ch] = (freq[ch] || 0) + 1;
+    });
+    var best = Object.keys(freq).sort(function(a,b){ return freq[b]-freq[a]; })[0];
+    result += best;
   }
-  ctx.putImageData(imgData, 0, 0);
-  return dst;
+  return result;
+}
+
+// 이미지 전처리 변형본 생성 (원본 포함 총 4가지)
+function getCanvasVariants(srcCanvas) {
+  var w = srcCanvas.width, h = srcCanvas.height;
+  var variants = [srcCanvas];
+
+  function makeVariant(transform) {
+    var dst = document.createElement('canvas');
+    dst.width = w; dst.height = h;
+    var ctx = dst.getContext('2d');
+    ctx.drawImage(srcCanvas, 0, 0);
+    var imgData = ctx.getImageData(0, 0, w, h);
+    var d = imgData.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      var val = transform(gray);
+      d[i] = d[i+1] = d[i+2] = Math.min(255, Math.max(0, val));
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return dst;
+  }
+
+  // 대비 1.8배
+  variants.push(makeVariant(function(g){ return (g-128)*1.8+128; }));
+  // 대비 2.4배 (강하게)
+  variants.push(makeVariant(function(g){ return (g-128)*2.4+128; }));
+  // 반전 (흰 바코드 대응)
+  variants.push(makeVariant(function(g){ return 255-g; }));
+
+  return variants;
 }
 
 function startScanLoop(video) {
   var canvas = document.getElementById('scan-canvas');
   var ctx = canvas.getContext('2d');
   var frameCount = 0;
-  var votes = {};
+  var collected = []; // 수집된 후보들
+  var CONFIRM_COUNT = 5; // 5개 수집 후 자릿수 다수결
 
   function scan() {
     if (!cameraActive || !detector) return;
@@ -792,30 +823,38 @@ function startScanLoop(video) {
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
 
-      // 원본 + 전처리본 둘 다 시도
-      var processed = preprocessCanvas(canvas);
+      var variants = getCanvasVariants(canvas);
 
-      detector.detect(canvas).then(function(barcodes) {
-        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-          return barcodes;
-        }
-        // 원본 실패시 전처리본으로 재시도
-        return detector.detect(processed);
-      }).then(function(barcodes) {
-        if (barcodes && barcodes.length > 0) {
-          var code = barcodes[0].rawValue;
-          if (code && code.length >= 8) {
-            votes[code] = (votes[code] || 0) + 1;
-            setScanStatus('인식 중... (' + votes[code] + '/3)');
-            if (votes[code] >= 3) {
-              setBarcode(code);
+      // 모든 variant에 대해 순서대로 detect 시도
+      var detectChain = Promise.resolve(null);
+      variants.forEach(function(v) {
+        detectChain = detectChain.then(function(found) {
+          if (found) return found; // 이미 찾았으면 스킵
+          return detector.detect(v).then(function(b) {
+            return (b && b.length > 0 && b[0].rawValue) ? b[0].rawValue : null;
+          }).catch(function(){ return null; });
+        });
+      });
+
+      detectChain.then(function(code) {
+        if (code && code.length >= 8) {
+          collected.push(code);
+          setScanStatus('스캔 중... (' + collected.length + '/' + CONFIRM_COUNT + ')');
+
+          if (collected.length >= CONFIRM_COUNT) {
+            // 자릿수별 다수결로 최종 확정
+            var final = digitVoteMajority(collected);
+            if (final) {
+              setBarcode(final);
               stopCamera();
               showToast('바코드 인식 완료!');
               return;
             }
+            // 다수결 실패면 초기화하고 재시도
+            collected = [];
           }
         } else {
-          setScanStatus('스캔 중...');
+          if (collected.length === 0) setScanStatus('스캔 중...');
         }
         scanLoop = requestAnimationFrame(scan);
       }).catch(function() {
@@ -830,36 +869,36 @@ function startScanLoop(video) {
 }
 
 function captureBarcode() {
-  // 수동 촬영 - 연속 5프레임 찍어서 가장 많이 나온 값 사용
   var video = document.getElementById('video');
   if (!video.srcObject || !detector) { showToast('카메라를 먼저 켜줘'); return; }
-  setScanStatus('촬영 중...');
 
-  // 스캔 루프 잠시 멈추고 집중 스캔
   if (scanLoop) { cancelAnimationFrame(scanLoop); scanLoop = null; }
 
   var canvas = document.getElementById('scan-canvas');
   var ctx = canvas.getContext('2d');
   var results = [];
   var attempts = 0;
-  var maxAttempts = 8;
+  var maxAttempts = 10;
 
   function tryScan() {
     if (attempts >= maxAttempts) {
-      // 결과 집계
       if (results.length === 0) {
         setScanStatus('스캔 중...');
-        startScanLoop(video); // 루프 재시작
+        startScanLoop(video);
         showToast('인식 실패 - 더 가까이 대봐');
         return;
       }
-      // 가장 많이 나온 값 선택
-      var freq = {};
-      results.forEach(function(r) { freq[r] = (freq[r] || 0) + 1; });
-      var best = Object.keys(freq).sort(function(a,b) { return freq[b]-freq[a]; })[0];
-      setBarcode(best);
-      stopCamera();
-      showToast('바코드 인식 완료!');
+      // 자릿수별 다수결로 최종 확정
+      var final = digitVoteMajority(results);
+      if (final) {
+        setBarcode(final);
+        stopCamera();
+        showToast('바코드 인식 완료!');
+      } else {
+        setScanStatus('스캔 중...');
+        startScanLoop(video);
+        showToast('인식 실패 - 다시 시도해줘');
+      }
       return;
     }
     attempts++;
@@ -867,17 +906,20 @@ function captureBarcode() {
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
     setScanStatus('촬영 중... (' + attempts + '/' + maxAttempts + ')');
-    var processed = preprocessCanvas(canvas);
-    detector.detect(canvas).then(function(barcodes) {
-      if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-        results.push(barcodes[0].rawValue);
-        setTimeout(tryScan, 60);
-        return;
-      }
-      return detector.detect(processed).then(function(b2) {
-        if (b2 && b2.length > 0 && b2[0].rawValue) results.push(b2[0].rawValue);
-        setTimeout(tryScan, 60);
+
+    var variants = getCanvasVariants(canvas);
+    var chain = Promise.resolve(null);
+    variants.forEach(function(v) {
+      chain = chain.then(function(found) {
+        if (found) return found;
+        return detector.detect(v).then(function(b) {
+          return (b && b.length > 0 && b[0].rawValue) ? b[0].rawValue : null;
+        }).catch(function(){ return null; });
       });
+    });
+    chain.then(function(code) {
+      if (code && code.length >= 8) results.push(code);
+      setTimeout(tryScan, 60);
     }).catch(function() { setTimeout(tryScan, 60); });
   }
 
@@ -886,7 +928,9 @@ function captureBarcode() {
 
 function setScanStatus(msg) {
   var el = document.getElementById('scan-status');
-  if (el) el.textContent = msg;
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
 }
 
 function stopCamera() {
